@@ -3,12 +3,115 @@ import { ethers } from 'ethers'
 import ABI from './abi.json'
 
 // --- Config ---
-// Update this after deploying your contract
 const CONTRACT_ADDRESS = '0x0000000000000000000000000000000000000000'
-const HARDHAT_CHAIN_ID = '0x7a69' // 31337
-const SEPOLIA_CHAIN_ID = '0xaa36a7' // 11155111
+
+// Zama fhEVM runs on Sepolia
+const ZAMA_NETWORK = {
+  chainId: '0xaa36a7',      // 11155111
+  chainName: 'Ethereum Sepolia (Zama fhEVM)',
+  nativeCurrency: { name: 'Sepolia ETH', symbol: 'ETH', decimals: 18 },
+  rpcUrls: ['https://rpc.sepolia.org'],
+  blockExplorerUrls: ['https://sepolia.etherscan.io'],
+}
+
+const LOCALHOST_NETWORK = {
+  chainId: '0x7a69',        // 31337
+  chainName: 'Hardhat Localhost',
+  nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+  rpcUrls: ['http://127.0.0.1:8545'],
+  blockExplorerUrls: [],
+}
+
+// Detect if we're on localhost (use local network) or production (use Sepolia)
+const TARGET_NETWORK = window.location.hostname === 'localhost' ? LOCALHOST_NETWORK : ZAMA_NETWORK
 
 type Toast = { msg: string; type: 'success' | 'error' | 'info' }
+
+// EIP-1193 provider type
+type EIP1193Provider = {
+  isMetaMask?: boolean
+  isPhantom?: boolean
+  isCoinbaseWallet?: boolean
+  isBraveWallet?: boolean
+  providers?: EIP1193Provider[]
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>
+  on: (event: string, handler: (...args: unknown[]) => void) => void
+  removeAllListeners: (event: string) => void
+}
+
+type WalletOption = {
+  id: string
+  name: string
+  icon: string
+  provider: EIP1193Provider | null
+  available: boolean
+  description: string
+}
+
+function detectWallets(): WalletOption[] {
+  const eth = (window as unknown as { ethereum?: EIP1193Provider }).ethereum
+  const phantom = (window as unknown as { phantom?: { ethereum?: EIP1193Provider } }).phantom
+
+  // Collect all injected providers (EIP-5749)
+  const allProviders: EIP1193Provider[] = []
+  if (eth?.providers && Array.isArray(eth.providers)) {
+    allProviders.push(...eth.providers)
+  } else if (eth) {
+    allProviders.push(eth)
+  }
+
+  const findProvider = (predicate: (p: EIP1193Provider) => boolean) =>
+    allProviders.find(predicate) ?? null
+
+  const metamaskProvider = findProvider(p => !!p.isMetaMask && !p.isPhantom)
+  const phantomEvmProvider = phantom?.ethereum ?? findProvider(p => !!p.isPhantom) ?? null
+  const coinbaseProvider = findProvider(p => !!p.isCoinbaseWallet)
+  const braveProvider = findProvider(p => !!p.isBraveWallet)
+  const genericProvider = eth && !eth.isMetaMask && !eth.isPhantom && !eth.isCoinbaseWallet ? eth : null
+
+  return [
+    {
+      id: 'metamask',
+      name: 'MetaMask',
+      icon: '🦊',
+      provider: metamaskProvider,
+      available: !!metamaskProvider,
+      description: 'Most popular EVM wallet',
+    },
+    {
+      id: 'phantom',
+      name: 'Phantom (EVM)',
+      icon: '👻',
+      provider: phantomEvmProvider,
+      available: !!phantomEvmProvider,
+      description: 'Phantom Ethereum wallet',
+    },
+    {
+      id: 'coinbase',
+      name: 'Coinbase Wallet',
+      icon: '🔵',
+      provider: coinbaseProvider,
+      available: !!coinbaseProvider,
+      description: 'Coinbase self-custody wallet',
+    },
+    {
+      id: 'brave',
+      name: 'Brave Wallet',
+      icon: '🦁',
+      provider: braveProvider,
+      available: !!braveProvider,
+      description: 'Built-in Brave browser wallet',
+    },
+    {
+      id: 'generic',
+      name: 'Browser Wallet',
+      icon: '🌐',
+      provider: genericProvider ?? eth ?? null,
+      available: !!eth,
+      description: 'Any injected wallet',
+    },
+  ]
+}
 
 function App() {
   const [account, setAccount] = useState<string | null>(null)
@@ -22,6 +125,9 @@ function App() {
   const [cycleCount, setCycleCount] = useState(0)
   const [toast, setToast] = useState<Toast | null>(null)
   const [loading, setLoading] = useState<string | null>(null)
+  const [showWalletModal, setShowWalletModal] = useState(false)
+  const [wallets, setWallets] = useState<WalletOption[]>([])
+  const [networkName, setNetworkName] = useState('')
 
   // Form state
   const [newEmpAddress, setNewEmpAddress] = useState('')
@@ -33,21 +139,62 @@ function App() {
     setTimeout(() => setToast(null), 4000)
   }
 
-  // --- Connect Wallet ---
-  const connectWallet = async () => {
-    if (!window.ethereum) {
-      showToast('Please install MetaMask', 'error')
+  const openWalletModal = () => {
+    setWallets(detectWallets())
+    setShowWalletModal(true)
+  }
+
+  // --- Switch / Add network ---
+  const switchToTargetNetwork = async (rawProvider: EIP1193Provider) => {
+    try {
+      await rawProvider.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: TARGET_NETWORK.chainId }],
+      })
+    } catch (err: unknown) {
+      // 4902 = chain not added yet
+      const code = (err as { code?: number })?.code
+      if (code === 4902 || code === -32603) {
+        await rawProvider.request({
+          method: 'wallet_addEthereumChain',
+          params: [TARGET_NETWORK],
+        })
+      } else {
+        throw err
+      }
+    }
+  }
+
+  // --- Connect specific wallet ---
+  const connectWallet = async (wallet: WalletOption) => {
+    if (!wallet.provider) {
+      showToast(`${wallet.name} not detected. Please install it.`, 'error')
       return
     }
+    setShowWalletModal(false)
+    setLoading('connect')
     try {
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' }) as string[]
-      const prov = new ethers.BrowserProvider(window.ethereum as ethers.Eip1193Provider)
+      // Request accounts
+      const accounts = await wallet.provider.request({ method: 'eth_requestAccounts' }) as string[]
+
+      // Switch to target network
+      try {
+        await switchToTargetNetwork(wallet.provider)
+      } catch {
+        showToast('Could not switch network automatically — please switch manually', 'error')
+      }
+
+      const prov = new ethers.BrowserProvider(wallet.provider as ethers.Eip1193Provider)
+      const network = await prov.getNetwork()
+      setNetworkName(network.name === 'unknown' ? `Chain ${network.chainId}` : network.name)
       setProvider(prov)
       setAccount(accounts[0])
-      showToast('Wallet connected!', 'success')
-    } catch (err) {
-      showToast('Failed to connect wallet', 'error')
-      console.error(err)
+      showToast(`${wallet.name} connected!`, 'success')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Connection failed'
+      showToast(msg.slice(0, 100), 'error')
+    } finally {
+      setLoading(null)
     }
   }
 
@@ -93,9 +240,10 @@ function App() {
   }, [loadContractData])
 
   useEffect(() => {
-    if (window.ethereum) {
-      window.ethereum.on('accountsChanged', () => window.location.reload())
-      window.ethereum.on('chainChanged', () => window.location.reload())
+    const eth = (window as unknown as { ethereum?: EIP1193Provider }).ethereum
+    if (eth) {
+      eth.on('accountsChanged', () => window.location.reload())
+      eth.on('chainChanged', () => window.location.reload())
     }
   }, [])
 
@@ -255,6 +403,65 @@ function App() {
 
   const shortAddr = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`
 
+  // --- Wallet Selection Modal ---
+  const WalletModal = () => (
+    <div
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200
+      }}
+      onClick={() => setShowWalletModal(false)}
+    >
+      <div
+        style={{
+          background: 'var(--card)', border: '1px solid var(--border)',
+          borderRadius: '16px', padding: '2rem', minWidth: '340px', maxWidth: '400px'
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <h2 style={{ marginBottom: '0.5rem', fontSize: '1.2rem' }}>Connect Wallet</h2>
+        <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+          After connecting, you'll be switched to{' '}
+          <strong style={{ color: 'var(--accent)' }}>
+            {TARGET_NETWORK.chainName}
+          </strong>
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+          {wallets.map(w => (
+            <button
+              key={w.id}
+              onClick={() => w.available && connectWallet(w)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '1rem',
+                padding: '0.9rem 1rem', borderRadius: '10px',
+                background: w.available ? 'var(--bg)' : 'transparent',
+                border: `1px solid ${w.available ? 'var(--border)' : 'transparent'}`,
+                color: w.available ? 'var(--text)' : 'var(--text-dim)',
+                cursor: w.available ? 'pointer' : 'not-allowed',
+                opacity: w.available ? 1 : 0.4,
+                textAlign: 'left', width: '100%',
+                transition: 'border-color 0.2s',
+              }}
+              onMouseEnter={e => { if (w.available) (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)' }}
+              onMouseLeave={e => { if (w.available) (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)' }}
+            >
+              <span style={{ fontSize: '1.8rem' }}>{w.icon}</span>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{w.name}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                  {w.available ? w.description : 'Not installed'}
+                </div>
+              </div>
+              {w.available && (
+                <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: 'var(--success)' }}>Detected</span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+
   // --- Not Connected ---
   if (!account) {
     return (
@@ -269,17 +476,21 @@ function App() {
           <h2 style={{ justifyContent: 'center', marginBottom: '0.5rem' }}>
             On-chain payroll with encrypted salaries
           </h2>
-          <p style={{ color: 'var(--text-dim)', marginBottom: '2rem', maxWidth: '500px', margin: '0 auto 2rem' }}>
+          <p style={{ color: 'var(--text-dim)', maxWidth: '500px', margin: '0 auto 2rem' }}>
             Salary amounts are encrypted end-to-end using Fully Homomorphic Encryption.
             Only the employer and each employee can see their own salary.
-            Everyone else on the blockchain sees only encrypted data.
           </p>
 
           <div className="connect-btn">
-            <button className="btn btn-primary" onClick={connectWallet}>
-              Connect MetaMask
+            <button className="btn btn-primary" onClick={openWalletModal} disabled={loading === 'connect'}>
+              {loading === 'connect'
+                ? <><span className="loading"></span>Connecting...</>
+                : '🔗 Connect Wallet'}
             </button>
           </div>
+          <p style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: 'var(--text-dim)' }}>
+            Supports MetaMask, Phantom, Coinbase Wallet and more
+          </p>
         </div>
 
         <div className="card">
@@ -301,6 +512,8 @@ function App() {
             <span className="badge badge-employee">✓ Private</span>
           </div>
         </div>
+
+        {showWalletModal && <WalletModal />}
       </div>
     )
   }
@@ -325,7 +538,9 @@ function App() {
           <span className="network-dot"></span>
           Connected: {shortAddr(account)}
         </div>
-        <div>Cycle #{cycleCount} • {employees.length} employees</div>
+        <div style={{ color: 'var(--accent)', fontSize: '0.8rem' }}>
+          {networkName || TARGET_NETWORK.chainName} • Cycle #{cycleCount} • {employees.length} employees
+        </div>
       </div>
 
       {notConfigured && (
@@ -484,12 +699,13 @@ function App() {
         </div>
       )}
 
-      {/* Toast */}
       {toast && (
         <div className={`toast toast-${toast.type}`}>
           {toast.msg}
         </div>
       )}
+
+      {showWalletModal && <WalletModal />}
     </div>
   )
 }
