@@ -3,7 +3,7 @@ import { ethers } from 'ethers'
 import ABI from './abi.json'
 
 // --- Config ---
-const CONTRACT_ADDRESS = '0x0000000000000000000000000000000000000000'
+const CONTRACT_ADDRESS = '0x6dF4438C80D908B450a214eEF2A8DAAC748936AE'
 
 // Zama fhEVM runs on Sepolia
 const ZAMA_NETWORK = {
