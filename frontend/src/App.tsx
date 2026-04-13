@@ -49,10 +49,18 @@ type WalletOption = {
 }
 
 function detectWallets(): WalletOption[] {
-  const eth = (window as unknown as { ethereum?: EIP1193Provider }).ethereum
-  const phantom = (window as unknown as { phantom?: { ethereum?: EIP1193Provider } }).phantom
+  const w = window as unknown as {
+    ethereum?: EIP1193Provider
+    phantom?: { ethereum?: EIP1193Provider }
+    okxwallet?: EIP1193Provider
+    bitkeep?: { ethereum?: EIP1193Provider }
+    // Bitget Wallet newer injection key
+    bitgetWalletProvider?: EIP1193Provider
+  }
 
-  // Collect all injected providers (EIP-5749)
+  const eth = w.ethereum
+
+  // Collect all injected providers (EIP-5749 multi-wallet)
   const allProviders: EIP1193Provider[] = []
   if (eth?.providers && Array.isArray(eth.providers)) {
     allProviders.push(...eth.providers)
@@ -63,11 +71,33 @@ function detectWallets(): WalletOption[] {
   const findProvider = (predicate: (p: EIP1193Provider) => boolean) =>
     allProviders.find(predicate) ?? null
 
-  const metamaskProvider = findProvider(p => !!p.isMetaMask && !p.isPhantom)
-  const phantomEvmProvider = phantom?.ethereum ?? findProvider(p => !!p.isPhantom) ?? null
+  // MetaMask: isMetaMask=true but not Phantom/Bitget/OKX
+  const metamaskProvider = findProvider(
+    p => !!p.isMetaMask && !p.isPhantom && !(p as unknown as { isOkxWallet?: boolean }).isOkxWallet
+  )
+
+  // Phantom EVM
+  const phantomEvmProvider = w.phantom?.ethereum
+    ?? findProvider(p => !!p.isPhantom)
+    ?? null
+
+  // OKX Wallet — injects at window.okxwallet
+  const okxProvider = w.okxwallet
+    ?? findProvider(p => !!(p as unknown as { isOkxWallet?: boolean }).isOkxWallet)
+    ?? null
+
+  // Bitget Wallet — injects at window.bitkeep.ethereum or window.bitgetWalletProvider
+  const bitgetProvider = w.bitgetWalletProvider
+    ?? w.bitkeep?.ethereum
+    ?? findProvider(p => !!(p as unknown as { isBitKeep?: boolean; isBitget?: boolean }).isBitKeep
+      || !!(p as unknown as { isBitget?: boolean }).isBitget)
+    ?? null
+
+  // Coinbase Wallet
   const coinbaseProvider = findProvider(p => !!p.isCoinbaseWallet)
+
+  // Brave Wallet
   const braveProvider = findProvider(p => !!p.isBraveWallet)
-  const genericProvider = eth && !eth.isMetaMask && !eth.isPhantom && !eth.isCoinbaseWallet ? eth : null
 
   return [
     {
@@ -77,6 +107,22 @@ function detectWallets(): WalletOption[] {
       provider: metamaskProvider,
       available: !!metamaskProvider,
       description: 'Most popular EVM wallet',
+    },
+    {
+      id: 'okx',
+      name: 'OKX Wallet',
+      icon: '⭕',
+      provider: okxProvider,
+      available: !!okxProvider,
+      description: 'OKX multi-chain wallet',
+    },
+    {
+      id: 'bitget',
+      name: 'Bitget Wallet',
+      icon: '🅱',
+      provider: bitgetProvider,
+      available: !!bitgetProvider,
+      description: 'Bitget Web3 wallet',
     },
     {
       id: 'phantom',
@@ -104,11 +150,11 @@ function detectWallets(): WalletOption[] {
     },
     {
       id: 'generic',
-      name: 'Browser Wallet',
+      name: 'Other Wallet',
       icon: '🌐',
-      provider: genericProvider ?? eth ?? null,
+      provider: eth ?? null,
       available: !!eth,
-      description: 'Any injected wallet',
+      description: 'Any other injected wallet',
     },
   ]
 }
