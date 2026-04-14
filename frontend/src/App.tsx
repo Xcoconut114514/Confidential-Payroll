@@ -134,9 +134,15 @@ function App() {
     }
   }
 
-  const handleDisconnect = () => {
-    // Remove listeners from the active provider
+  const handleDisconnect = async () => {
+    // Revoke site permissions so next connection FORCES account-picker UI
     if (activeProviderRef.current) {
+      try {
+        await activeProviderRef.current.request({
+          method: 'wallet_revokePermissions',
+          params: [{ eth_accounts: {} }],
+        })
+      } catch { /* not supported by all wallets — continue */ }
       try { activeProviderRef.current.removeAllListeners('accountsChanged') } catch { /* ignore */ }
       try { activeProviderRef.current.removeAllListeners('chainChanged') } catch { /* ignore */ }
       activeProviderRef.current = null
@@ -158,13 +164,6 @@ function App() {
     setShowWalletModal(false)
     setLoading('connect')
     try {
-      // wallet_requestPermissions forces the wallet to show the account-picker UI
-      // even if this site already has permission (prevents auto-connecting cached account)
-      try {
-        await wallet.provider.request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] })
-      } catch {
-        // Some wallets don't support this — fall through to eth_requestAccounts
-      }
       const accounts = await wallet.provider.request({ method: 'eth_requestAccounts' }) as string[]
       try { await switchToTargetNetwork(wallet.provider) } catch { showToast('Could not auto-switch network', 'error') }
       const prov = new ethers.BrowserProvider(wallet.provider as ethers.Eip1193Provider)
