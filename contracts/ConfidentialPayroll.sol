@@ -4,15 +4,17 @@ pragma solidity ^0.8.24;
 import {FHE, euint64, externalEuint64, ebool} from "@fhevm/solidity/lib/FHE.sol";
 import {ZamaEthereumConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
 
-/// @title Confidential Payroll - Private salary payments on-chain
-/// @notice Employer sets encrypted salaries, employees can only see their own.
-///         All salary amounts are encrypted end-to-end using FHE.
+/// @title ConfidentialCorp - Confidential Corporate Governance Suite
+/// @notice Enterprise-grade privacy platform: encrypted payroll, compliance auditing,
+///         and tax authority verification. All sensitive financial data encrypted via FHE.
+///         Auditors see aggregates only. Tax authorities verify compliance without seeing individual salaries.
 contract ConfidentialPayroll is ZamaEthereumConfig {
     // ============ State ============
 
     address public employer;
     string public companyName;
 
+    // --- Employee registry ---
     address[] public employeeList;
     mapping(address => bool) public isEmployee;
     mapping(address => euint64) private _salaries; // encrypted salary per employee
@@ -24,6 +26,22 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
 
     euint64 private _treasuryBalance; // encrypted treasury
 
+    // --- Compliance: Auditor role ---
+    mapping(address => bool) public isAuditor;
+    address[] public auditorList;
+    euint64 private _totalPayrollPerCycle; // encrypted total payroll expense of last cycle
+
+    // --- Tax Authority role ---
+    mapping(address => bool) public isTaxAuthority;
+    address[] public taxAuthorityList;
+    uint64 public minimumWage; // public minimum wage threshold (plaintext for transparency)
+    euint64 private _totalHistoricalPayroll; // encrypted cumulative payroll across all cycles
+
+    // --- Compliance results (stored for view access after tx) ---
+    ebool private _lastSolvencyCheck;
+    mapping(address => ebool) private _lastMinWageCheck; // per-employee minimum wage result
+    ebool private _lastAllMinWageCheck;
+
     // ============ Events ============
 
     event EmployeeAdded(address indexed employee);
@@ -32,6 +50,11 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
     event PayrollExecuted(uint256 indexed cycle, uint256 timestamp, uint256 employeeCount);
     event FundsDeposited(uint256 timestamp);
     event FundsWithdrawn(address indexed employee, uint256 timestamp);
+    event AuditorAdded(address indexed auditor);
+    event AuditorRemoved(address indexed auditor);
+    event TaxAuthorityAdded(address indexed authority);
+    event TaxAuthorityRemoved(address indexed authority);
+    event MinimumWageUpdated(uint64 newMinimumWage);
 
     // ============ Modifiers ============
 
@@ -42,6 +65,16 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
 
     modifier onlyEmployee() {
         require(isEmployee[msg.sender], "Not an employee");
+        _;
+    }
+
+    modifier onlyAuditor() {
+        require(isAuditor[msg.sender], "Not an auditor");
+        _;
+    }
+
+    modifier onlyTaxAuthority() {
+        require(isTaxAuthority[msg.sender], "Not a tax authority");
         _;
     }
 
@@ -126,6 +159,9 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
         uint256 count = employeeList.length;
         require(count > 0, "No employees");
 
+        // Reset cycle total to zero
+        _totalPayrollPerCycle = FHE.asEuint64(0);
+
         for (uint256 i = 0; i < count; i++) {
             address emp = employeeList[i];
 
@@ -135,6 +171,9 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
             // Subtract from treasury
             _treasuryBalance = FHE.sub(_treasuryBalance, _salaries[emp]);
 
+            // Accumulate total payroll for this cycle
+            _totalPayrollPerCycle = FHE.add(_totalPayrollPerCycle, _salaries[emp]);
+
             // Set ACL for updated balances
             FHE.allowThis(_balances[emp]);
             FHE.allow(_balances[emp], employer);
@@ -143,8 +182,27 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
             isPaidThisCycle[emp] = true;
         }
 
+        // Accumulate historical total
+        _totalHistoricalPayroll = FHE.add(_totalHistoricalPayroll, _totalPayrollPerCycle);
+
         FHE.allowThis(_treasuryBalance);
         FHE.allow(_treasuryBalance, employer);
+
+        // Set ACL for payroll totals: employer + all auditors + all tax authorities
+        FHE.allowThis(_totalPayrollPerCycle);
+        FHE.allow(_totalPayrollPerCycle, employer);
+        FHE.allowThis(_totalHistoricalPayroll);
+        FHE.allow(_totalHistoricalPayroll, employer);
+
+        for (uint256 i = 0; i < auditorList.length; i++) {
+            FHE.allow(_totalPayrollPerCycle, auditorList[i]);
+            FHE.allow(_totalHistoricalPayroll, auditorList[i]);
+            FHE.allow(_treasuryBalance, auditorList[i]);
+        }
+        for (uint256 i = 0; i < taxAuthorityList.length; i++) {
+            FHE.allow(_totalPayrollPerCycle, taxAuthorityList[i]);
+            FHE.allow(_totalHistoricalPayroll, taxAuthorityList[i]);
+        }
 
         payrollCycleCount++;
         lastPayTimestamp = block.timestamp;
@@ -197,5 +255,158 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
     /// @notice Employer views treasury balance (encrypted)
     function viewTreasury() external view onlyEmployer returns (euint64) {
         return _treasuryBalance;
+    }
+
+    // ============ Auditor Management ============
+
+    /// @notice Add an auditor who can view aggregate payroll data
+    function addAuditor(address auditor) external onlyEmployer {
+        require(auditor != address(0), "Invalid address");
+        require(!isAuditor[auditor], "Already auditor");
+        isAuditor[auditor] = true;
+        auditorList.push(auditor);
+        emit AuditorAdded(auditor);
+    }
+
+    /// @notice Remove an auditor
+    function removeAuditor(address auditor) external onlyEmployer {
+        require(isAuditor[auditor], "Not an auditor");
+        isAuditor[auditor] = false;
+        for (uint256 i = 0; i < auditorList.length; i++) {
+            if (auditorList[i] == auditor) {
+                auditorList[i] = auditorList[auditorList.length - 1];
+                auditorList.pop();
+                break;
+            }
+        }
+        emit AuditorRemoved(auditor);
+    }
+
+    /// @notice Get all auditor addresses
+    function getAuditors() external view returns (address[] memory) {
+        return auditorList;
+    }
+
+    // ============ Tax Authority Management ============
+
+    /// @notice Add a tax authority who can verify compliance without seeing individual salaries
+    function addTaxAuthority(address authority) external onlyEmployer {
+        require(authority != address(0), "Invalid address");
+        require(!isTaxAuthority[authority], "Already tax authority");
+        isTaxAuthority[authority] = true;
+        taxAuthorityList.push(authority);
+        emit TaxAuthorityAdded(authority);
+    }
+
+    /// @notice Remove a tax authority
+    function removeTaxAuthority(address authority) external onlyEmployer {
+        require(isTaxAuthority[authority], "Not a tax authority");
+        isTaxAuthority[authority] = false;
+        for (uint256 i = 0; i < taxAuthorityList.length; i++) {
+            if (taxAuthorityList[i] == authority) {
+                taxAuthorityList[i] = taxAuthorityList[taxAuthorityList.length - 1];
+                taxAuthorityList.pop();
+                break;
+            }
+        }
+        emit TaxAuthorityRemoved(authority);
+    }
+
+    /// @notice Get all tax authority addresses
+    function getTaxAuthorities() external view returns (address[] memory) {
+        return taxAuthorityList;
+    }
+
+    /// @notice Set the minimum wage threshold (plaintext, for transparency)
+    function setMinimumWage(uint64 _minimumWage) external onlyEmployer {
+        minimumWage = _minimumWage;
+        emit MinimumWageUpdated(_minimumWage);
+    }
+
+    // ============ Auditor Functions ============
+
+    /// @notice Auditor views encrypted total payroll expense of last cycle (aggregate only)
+    function viewTotalExpense() external view onlyAuditor returns (euint64) {
+        return _totalPayrollPerCycle;
+    }
+
+    /// @notice Auditor views encrypted treasury balance (to verify solvency)
+    function viewTreasuryAsAuditor() external view onlyAuditor returns (euint64) {
+        return _treasuryBalance;
+    }
+
+    /// @notice Auditor checks if treasury >= total payroll (solvency check)
+    /// @dev Stores encrypted boolean result — call viewSolvencyResult() to read
+    function complianceCheck() external onlyAuditor {
+        ebool isSolvent = FHE.ge(_treasuryBalance, _totalPayrollPerCycle);
+        _lastSolvencyCheck = isSolvent;
+        FHE.allowThis(isSolvent);
+        FHE.allow(isSolvent, msg.sender);
+        FHE.allow(isSolvent, employer);
+    }
+
+    /// @notice View the last solvency check result (auditor or employer)
+    function viewSolvencyResult() external view returns (ebool) {
+        require(isAuditor[msg.sender] || msg.sender == employer, "Not authorized");
+        return _lastSolvencyCheck;
+    }
+
+    // ============ Tax Authority Functions ============
+
+    /// @notice Tax authority views encrypted total payroll expense of last cycle
+    function viewTotalExpenseAsTax() external view onlyTaxAuthority returns (euint64) {
+        return _totalPayrollPerCycle;
+    }
+
+    /// @notice Tax authority views encrypted cumulative historical payroll
+    function viewHistoricalPayroll() external view onlyTaxAuthority returns (euint64) {
+        return _totalHistoricalPayroll;
+    }
+
+    /// @notice Tax authority verifies if a specific employee's salary meets minimum wage
+    /// @dev Stores result — call viewMinWageResult(employee) to read
+    function verifyMinimumWage(address employee) external onlyTaxAuthority {
+        require(isEmployee[employee], "Not an employee");
+        require(minimumWage > 0, "Minimum wage not set");
+
+        euint64 minWageEnc = FHE.asEuint64(minimumWage);
+        ebool meetsMinWage = FHE.ge(_salaries[employee], minWageEnc);
+
+        _lastMinWageCheck[employee] = meetsMinWage;
+        FHE.allowThis(meetsMinWage);
+        FHE.allow(meetsMinWage, msg.sender);
+        FHE.allow(meetsMinWage, employer);
+    }
+
+    /// @notice View minimum wage check result for a specific employee
+    function viewMinWageResult(address employee) external view returns (ebool) {
+        require(isTaxAuthority[msg.sender] || msg.sender == employer, "Not authorized");
+        return _lastMinWageCheck[employee];
+    }
+
+    /// @notice Tax authority batch-verifies all employees meet minimum wage
+    /// @dev Stores result — call viewAllMinWageResult() to read
+    function verifyAllMinimumWage() external onlyTaxAuthority {
+        require(employeeList.length > 0, "No employees");
+        require(minimumWage > 0, "Minimum wage not set");
+
+        euint64 minWageEnc = FHE.asEuint64(minimumWage);
+        ebool allMeet = FHE.asEbool(true);
+
+        for (uint256 i = 0; i < employeeList.length; i++) {
+            ebool meets = FHE.ge(_salaries[employeeList[i]], minWageEnc);
+            allMeet = FHE.and(allMeet, meets);
+        }
+
+        _lastAllMinWageCheck = allMeet;
+        FHE.allowThis(allMeet);
+        FHE.allow(allMeet, msg.sender);
+        FHE.allow(allMeet, employer);
+    }
+
+    /// @notice View batch minimum wage check result
+    function viewAllMinWageResult() external view returns (ebool) {
+        require(isTaxAuthority[msg.sender] || msg.sender == employer, "Not authorized");
+        return _lastAllMinWageCheck;
     }
 }
