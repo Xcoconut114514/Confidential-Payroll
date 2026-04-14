@@ -166,20 +166,15 @@ function App() {
     try {
       let accounts: string[]
 
-      // Race wallet_requestPermissions against a 2s timeout.
-      // If the wallet supports it, it pops up the account picker.
-      // If it hangs (OKX, etc.) or throws, we fall back to eth_requestAccounts.
-      let usedPermissions = false
+      // wallet_requestPermissions forces the wallet to pop up its account
+      // picker UI. Most wallets (MetaMask, OKX, Coinbase) support this.
+      // We await without timeout — the user needs time to pick an account.
       try {
-        const permPromise = wallet.provider.request({
+        await wallet.provider.request({
           method: 'wallet_requestPermissions',
           params: [{ eth_accounts: {} }],
         })
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), 2000)
-        )
-        await Promise.race([permPromise, timeoutPromise])
-        usedPermissions = true
+        // Read whichever account the user just selected
         accounts = await wallet.provider.request({ method: 'eth_accounts' }) as string[]
         if (!accounts || accounts.length === 0) {
           accounts = await wallet.provider.request({ method: 'eth_requestAccounts' }) as string[]
@@ -190,7 +185,7 @@ function App() {
           setLoading(null)
           return
         }
-        // Timed out or not supported — fall back
+        // Method truly not supported — fall back to basic connect
         accounts = await wallet.provider.request({ method: 'eth_requestAccounts' }) as string[]
       }
 
