@@ -164,16 +164,34 @@ function App() {
     setShowWalletModal(false)
     setLoading('connect')
     try {
-      // Step 1: Revoke existing permissions on THIS wallet so it forgets cached accounts
+      let accounts: string[]
       try {
-        await wallet.provider.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] })
-      } catch { /* not all wallets support this */ }
-      // Step 2: Request fresh permissions — forces the wallet to show account-picker UI
-      try {
-        await wallet.provider.request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] })
-      } catch { /* fallback: some wallets only support eth_requestAccounts */ }
-      // Step 3: Get the selected account
-      const accounts = await wallet.provider.request({ method: 'eth_requestAccounts' }) as string[]
+        // wallet_requestPermissions forces the wallet extension to open its
+        // account-picker UI, even if the site already has permission.
+        await wallet.provider.request({
+          method: 'wallet_requestPermissions',
+          params: [{ eth_accounts: {} }],
+        })
+        // After user picks an account, read it (eth_accounts is read-only, no popup)
+        accounts = await wallet.provider.request({ method: 'eth_accounts' }) as string[]
+        if (!accounts || accounts.length === 0) {
+          // Some wallets need eth_requestAccounts after permission grant
+          accounts = await wallet.provider.request({ method: 'eth_requestAccounts' }) as string[]
+        }
+      } catch (permErr: unknown) {
+        const code = (permErr as { code?: number })?.code
+        if (code === 4001) {
+          // User explicitly rejected — stop, do NOT silently fall through
+          showToast('Connection cancelled', 'info')
+          return
+        }
+        // Method not supported (-32601, -32603, 4200) — fall back to eth_requestAccounts
+        accounts = await wallet.provider.request({ method: 'eth_requestAccounts' }) as string[]
+      }
+      if (!accounts || accounts.length === 0) {
+        showToast('No accounts returned from wallet', 'error')
+        return
+      }
       try { await switchToTargetNetwork(wallet.provider) } catch { showToast('Could not auto-switch network', 'error') }
       const prov = new ethers.BrowserProvider(wallet.provider as ethers.Eip1193Provider)
       const network = await prov.getNetwork()
