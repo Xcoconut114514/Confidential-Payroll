@@ -164,30 +164,20 @@ function App() {
     setShowWalletModal(false)
     setLoading('connect')
     try {
-      let accounts: string[]
-
-      // wallet_requestPermissions forces the wallet to pop up its account
-      // picker UI. Most wallets (MetaMask, OKX, Coinbase) support this.
-      // We await without timeout — the user needs time to pick an account.
+      // ---- Force the wallet to forget this site so it MUST show the account picker ----
+      // Method 1: disconnect() — non-standard but supported by OKX, Phantom, etc.
       try {
-        await wallet.provider.request({
-          method: 'wallet_requestPermissions',
-          params: [{ eth_accounts: {} }],
-        })
-        // Read whichever account the user just selected
-        accounts = await wallet.provider.request({ method: 'eth_accounts' }) as string[]
-        if (!accounts || accounts.length === 0) {
-          accounts = await wallet.provider.request({ method: 'eth_requestAccounts' }) as string[]
-        }
-      } catch (permErr: unknown) {
-        if ((permErr as { code?: number })?.code === 4001) {
-          showToast('Connection cancelled', 'info')
-          setLoading(null)
-          return
-        }
-        // Method truly not supported — fall back to basic connect
-        accounts = await wallet.provider.request({ method: 'eth_requestAccounts' }) as string[]
-      }
+        const p = wallet.provider as unknown as { disconnect?: () => void | Promise<void> }
+        if (typeof p.disconnect === 'function') await p.disconnect()
+      } catch { /* ignore */ }
+      // Method 2: wallet_revokePermissions — EIP standard, supported by MetaMask, some others
+      try {
+        await wallet.provider.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] })
+      } catch { /* ignore */ }
+
+      // Now eth_requestAccounts MUST open the wallet extension popup
+      // because the site no longer has permission.
+      const accounts = await wallet.provider.request({ method: 'eth_requestAccounts' }) as string[]
 
       if (!accounts || accounts.length === 0) {
         showToast('No accounts returned from wallet', 'error')
