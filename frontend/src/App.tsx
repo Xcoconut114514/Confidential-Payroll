@@ -134,15 +134,13 @@ function App() {
     }
   }
 
-  const handleDisconnect = async () => {
-    // Revoke site permissions so next connection FORCES account-picker UI
+  const handleDisconnect = () => {
     if (activeProviderRef.current) {
-      try {
-        await activeProviderRef.current.request({
-          method: 'wallet_revokePermissions',
-          params: [{ eth_accounts: {} }],
-        })
-      } catch { /* not supported by all wallets — continue */ }
+      // Fire-and-forget: do NOT await — some wallets hang on unsupported methods
+      activeProviderRef.current.request({
+        method: 'wallet_revokePermissions',
+        params: [{ eth_accounts: {} }],
+      }).catch(() => {})
       try { activeProviderRef.current.removeAllListeners('accountsChanged') } catch { /* ignore */ }
       try { activeProviderRef.current.removeAllListeners('chainChanged') } catch { /* ignore */ }
       activeProviderRef.current = null
@@ -156,6 +154,8 @@ function App() {
     setEmployees([])
     fhevmRef.current = null
     setNetworkName('')
+    setMySalary(null)
+    setMyBalance(null)
     openWalletModal()
   }
 
@@ -165,31 +165,38 @@ function App() {
     setLoading('connect')
     try {
       let accounts: string[]
+
+      // Race wallet_requestPermissions against a 2s timeout.
+      // If the wallet supports it, it pops up the account picker.
+      // If it hangs (OKX, etc.) or throws, we fall back to eth_requestAccounts.
+      let usedPermissions = false
       try {
-        // wallet_requestPermissions forces the wallet extension to open its
-        // account-picker UI, even if the site already has permission.
-        await wallet.provider.request({
+        const permPromise = wallet.provider.request({
           method: 'wallet_requestPermissions',
           params: [{ eth_accounts: {} }],
         })
-        // After user picks an account, read it (eth_accounts is read-only, no popup)
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), 2000)
+        )
+        await Promise.race([permPromise, timeoutPromise])
+        usedPermissions = true
         accounts = await wallet.provider.request({ method: 'eth_accounts' }) as string[]
         if (!accounts || accounts.length === 0) {
-          // Some wallets need eth_requestAccounts after permission grant
           accounts = await wallet.provider.request({ method: 'eth_requestAccounts' }) as string[]
         }
       } catch (permErr: unknown) {
-        const code = (permErr as { code?: number })?.code
-        if (code === 4001) {
-          // User explicitly rejected — stop, do NOT silently fall through
+        if ((permErr as { code?: number })?.code === 4001) {
           showToast('Connection cancelled', 'info')
+          setLoading(null)
           return
         }
-        // Method not supported (-32601, -32603, 4200) — fall back to eth_requestAccounts
+        // Timed out or not supported — fall back
         accounts = await wallet.provider.request({ method: 'eth_requestAccounts' }) as string[]
       }
+
       if (!accounts || accounts.length === 0) {
         showToast('No accounts returned from wallet', 'error')
+        setLoading(null)
         return
       }
       try { await switchToTargetNetwork(wallet.provider) } catch { showToast('Could not auto-switch network', 'error') }
