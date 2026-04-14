@@ -444,8 +444,8 @@ function App() {
     </div>
   )
 
-  // Setup Screen (shown after wallet connect when no contract is configured)
-  const SetupScreen = () => (
+  // Setup Screen — rendered as a function call (not a component) to avoid unmount on re-render
+  const renderSetupScreen = () => (
     <div className="card" style={{ maxWidth: '520px', margin: '2rem auto' }}>
       {setupMode === 'choose' && (
         <>
@@ -571,7 +571,7 @@ function App() {
           <div><span className="network-dot"></span>Connected: {shortAddr(account)}</div>
           <div style={{ color: 'var(--accent)', fontSize: '0.8rem' }}>{networkName}</div>
         </div>
-        <SetupScreen />
+        {renderSetupScreen()}
         {toast && <div className={'toast toast-' + toast.type}>{toast.msg}</div>}
       </div>
     )
@@ -742,7 +742,7 @@ function App() {
             <button className="btn btn-outline" onClick={handleClearContract}>
               Use a Different Contract
             </button>
-            <button className="btn btn-primary" onClick={() => { handleClearContract(); setTimeout(() => setSetupMode('deploy'), 50) }}>
+            <button className="btn btn-primary" onClick={() => { localStorage.removeItem(LS_CONTRACT_KEY); setContractAddress(''); setContract(null); setIsEmployer(false); setIsEmployee(false); setCompanyName(''); setEmployees([]); setExistingAddrInput(''); setDeployCompanyName(''); setSetupMode('deploy'); setShowSetup(true); }}>
               🏢 Deploy My Own Payroll
             </button>
           </div>
