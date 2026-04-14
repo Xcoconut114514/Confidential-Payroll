@@ -2,10 +2,13 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { ethers } from 'ethers'
 import ABI from './abi.json'
 import { BYTECODE } from './bytecode'
+import GOV_ABI from './governance-abi.json'
+import { GOVERNANCE_BYTECODE } from './governance-bytecode'
 import { useFhevm } from './useFhevm'
 
-// localStorage key for last-used contract address
+// localStorage keys
 const LS_CONTRACT_KEY = 'cpayroll_contract_v1'
+const LS_GOV_CONTRACT_KEY = 'cgov_contract_v1'
 
 // Zama fhEVM runs on Sepolia
 const ZAMA_NETWORK = {
@@ -98,6 +101,31 @@ function App() {
   const [wallets, setWallets] = useState<WalletOption[]>([])
   const [networkName, setNetworkName] = useState('')
   const activeProviderRef = useRef<EIP1193Provider | null>(null)
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'payroll' | 'governance' | 'compliance'>('payroll')
+
+  // Governance state
+  const [govContractAddress, setGovContractAddress] = useState<string>(() => localStorage.getItem(LS_GOV_CONTRACT_KEY) || '')
+  const [govContract, setGovContract] = useState<ethers.Contract | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [isBoardMember, setIsBoardMember] = useState(false)
+  const [boardMembers, setBoardMembers] = useState<string[]>([])
+  const [proposals, setProposals] = useState<Array<{ id: number; title: string; description: string; startTime: number; endTime: number; isFinalized: boolean; voterCount: number }>>([])
+  const [newMemberAddr, setNewMemberAddr] = useState('')
+  const [proposalTitle, setProposalTitle] = useState('')
+  const [proposalDesc, setProposalDesc] = useState('')
+  const [proposalDuration, setProposalDuration] = useState('')
+  const [deployGovOrgName, setDeployGovOrgName] = useState('')
+  const [govOrgName, setGovOrgName] = useState('')
+
+  // Compliance state
+  const [isAuditor, setIsAuditor] = useState(false)
+  const [isTaxAuthority, setIsTaxAuthority] = useState(false)
+  const [auditorAddr, setAuditorAddr] = useState('')
+  const [taxAuthAddr, setTaxAuthAddr] = useState('')
+  const [minWageInput, setMinWageInput] = useState('')
+  const [minWageCheckAddr, setMinWageCheckAddr] = useState('')
 
   // Setup flow state
   const [showSetup, setShowSetup] = useState(false)
@@ -292,6 +320,57 @@ function App() {
 
   useEffect(() => { loadContractData() }, [loadContractData])
 
+  // Load Governance contract data
+  const loadGovData = useCallback(async () => {
+    if (!provider || !account || !govContractAddress) return
+    try {
+      const signer = await provider.getSigner()
+      const gc = new ethers.Contract(govContractAddress, GOV_ABI, signer)
+      setGovContract(gc)
+      const [name, admin, members, proposalCount] = await Promise.all([
+        gc.orgName(),
+        gc.admin(),
+        gc.getBoardMembers(),
+        gc.getProposalCount(),
+      ])
+      setGovOrgName(name)
+      setIsAdmin(admin.toLowerCase() === account.toLowerCase())
+      setBoardMembers([...members])
+      setIsBoardMember(await gc.isBoardMember(account))
+      const props: typeof proposals = []
+      for (let i = 0; i < Number(proposalCount); i++) {
+        const p = await gc.proposals(i)
+        props.push({
+          id: i,
+          title: p.title,
+          description: p.description,
+          startTime: Number(p.startTime),
+          endTime: Number(p.endTime),
+          isFinalized: p.isFinalized,
+          voterCount: Number(p.voterCount),
+        })
+      }
+      setProposals(props)
+    } catch (err) { console.error('Failed to load governance data:', err) }
+  }, [provider, account, govContractAddress])
+
+  useEffect(() => { loadGovData() }, [loadGovData])
+
+  // Load compliance roles from payroll contract
+  const loadComplianceData = useCallback(async () => {
+    if (!contract || !account) return
+    try {
+      const [auditor, tax] = await Promise.all([
+        contract.isAuditor(account),
+        contract.isTaxAuthority(account),
+      ])
+      setIsAuditor(auditor)
+      setIsTaxAuthority(tax)
+    } catch { /* contract may not have these functions */ }
+  }, [contract, account])
+
+  useEffect(() => { loadComplianceData() }, [loadComplianceData])
+
   // global provider event listeners removed — handled per-wallet in connectWallet
 
   // Employer: Deposit
@@ -446,6 +525,262 @@ function App() {
 
   const shortAddr = (addr: string) => addr.slice(0, 6) + '...' + addr.slice(-4)
 
+  // ============ Governance Handlers ============
+
+  const handleDeployGov = async () => {
+    if (!provider || !deployGovOrgName.trim()) { showToast('Enter org name', 'error'); return }
+    setLoading('deployGov')
+    try {
+      const signer = await provider.getSigner()
+      const factory = new ethers.ContractFactory(GOV_ABI, GOVERNANCE_BYTECODE, signer)
+      showToast('Confirm governance deployment in wallet...', 'info')
+      const deployed = await factory.deploy(deployGovOrgName.trim())
+      await deployed.waitForDeployment()
+      const addr = await deployed.getAddress()
+      localStorage.setItem(LS_GOV_CONTRACT_KEY, addr)
+      setGovContractAddress(addr)
+      showToast('Governance deployed: ' + addr.slice(0, 10) + '...', 'success')
+    } catch (err: unknown) {
+      showToast((err instanceof Error ? err.message : 'Deploy failed').slice(0, 120), 'error')
+    } finally { setLoading(null) }
+  }
+
+  const handleConnectGov = (addr: string) => {
+    if (!ethers.isAddress(addr)) { showToast('Invalid address', 'error'); return }
+    const a = ethers.getAddress(addr)
+    localStorage.setItem(LS_GOV_CONTRACT_KEY, a)
+    setGovContractAddress(a)
+  }
+
+  const handleClearGov = () => {
+    localStorage.removeItem(LS_GOV_CONTRACT_KEY)
+    setGovContractAddress('')
+    setGovContract(null)
+    setIsAdmin(false)
+    setIsBoardMember(false)
+    setBoardMembers([])
+    setProposals([])
+    setGovOrgName('')
+  }
+
+  const handleAddBoardMember = async () => {
+    if (!govContract || !ethers.isAddress(newMemberAddr)) { showToast('Invalid address', 'error'); return }
+    setLoading('addMember')
+    try {
+      const tx = await govContract.addBoardMember(newMemberAddr)
+      await tx.wait()
+      showToast('Board member added', 'success')
+      setNewMemberAddr('')
+      await loadGovData()
+    } catch (err: unknown) {
+      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+    } finally { setLoading(null) }
+  }
+
+  const handleRemoveBoardMember = async (addr: string) => {
+    if (!govContract) return
+    setLoading('removeMember')
+    try {
+      const tx = await govContract.removeBoardMember(addr)
+      await tx.wait()
+      showToast('Member removed', 'success')
+      await loadGovData()
+    } catch (err: unknown) {
+      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 100), 'error')
+    } finally { setLoading(null) }
+  }
+
+  const handleCreateProposal = async () => {
+    if (!govContract || !proposalTitle.trim()) { showToast('Enter proposal title', 'error'); return }
+    const dur = parseInt(proposalDuration)
+    if (!dur || dur <= 0) { showToast('Enter valid duration in seconds', 'error'); return }
+    setLoading('createProposal')
+    try {
+      const tx = await govContract.createProposal(proposalTitle.trim(), proposalDesc.trim(), dur)
+      await tx.wait()
+      showToast('Proposal created!', 'success')
+      setProposalTitle(''); setProposalDesc(''); setProposalDuration('')
+      await loadGovData()
+    } catch (err: unknown) {
+      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+    } finally { setLoading(null) }
+  }
+
+  const handleVote = async (proposalId: number, voteYes: boolean) => {
+    if (!govContract || !provider) return
+    setLoading('vote-' + proposalId)
+    try {
+      const signer = await provider.getSigner()
+      const userAddress = await signer.getAddress()
+      const voteValue = voteYes ? 1 : 0
+      if (fhevmRef.current) {
+        const input = fhevmRef.current.createEncryptedInput(govContractAddress, userAddress)
+        input.add8(voteValue)
+        const enc = await input.encrypt()
+        const handle = ethers.hexlify(enc.handles[0])
+        const proof = ethers.hexlify(enc.inputProof)
+        const tx = await govContract.vote(proposalId, handle, proof)
+        await tx.wait()
+      } else {
+        const abiCoder = ethers.AbiCoder.defaultAbiCoder()
+        const handle = ethers.keccak256(abiCoder.encode(['uint8', 'address'], [voteValue, userAddress]))
+        const tx = await govContract.vote(proposalId, handle, '0x')
+        await tx.wait()
+      }
+      showToast('Vote cast!', 'success')
+      await loadGovData()
+    } catch (err: unknown) {
+      showToast((err instanceof Error ? err.message : 'Vote failed').slice(0, 120), 'error')
+    } finally { setLoading(null) }
+  }
+
+  const handleFinalize = async (proposalId: number) => {
+    if (!govContract) return
+    setLoading('finalize-' + proposalId)
+    try {
+      const tx = await govContract.finalizeProposal(proposalId)
+      await tx.wait()
+      showToast('Proposal finalized — results now public', 'success')
+      await loadGovData()
+    } catch (err: unknown) {
+      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+    } finally { setLoading(null) }
+  }
+
+  const handleDecryptVoteCounts = async (proposalId: number) => {
+    if (!govContract || !provider || !fhevmRef.current) { showToast('FHE SDK not ready', 'error'); return }
+    setLoading('decrypt-' + proposalId)
+    try {
+      const [encYes, encNo] = await govContract.viewVoteCounts(proposalId)
+      const yesHex = ethers.hexlify(encYes)
+      const noHex = ethers.hexlify(encNo)
+      const signer = await provider.getSigner()
+      const yesVal = await userDecryptHandle(fhevmRef.current, yesHex, govContractAddress, signer)
+      const noVal = await userDecryptHandle(fhevmRef.current, noHex, govContractAddress, signer)
+      showToast(`Results: YES ${yesVal} / NO ${noVal}`, 'success')
+    } catch (err: unknown) {
+      showToast((err instanceof Error ? err.message : 'Decrypt failed').slice(0, 120), 'error')
+    } finally { setLoading(null) }
+  }
+
+  // ============ Compliance Handlers ============
+
+  const handleAddAuditor = async () => {
+    if (!contract || !ethers.isAddress(auditorAddr)) { showToast('Invalid address', 'error'); return }
+    setLoading('addAuditor')
+    try {
+      const tx = await contract.addAuditor(auditorAddr)
+      await tx.wait()
+      showToast('Auditor added', 'success')
+      setAuditorAddr('')
+    } catch (err: unknown) {
+      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+    } finally { setLoading(null) }
+  }
+
+  const handleAddTaxAuthority = async () => {
+    if (!contract || !ethers.isAddress(taxAuthAddr)) { showToast('Invalid address', 'error'); return }
+    setLoading('addTax')
+    try {
+      const tx = await contract.addTaxAuthority(taxAuthAddr)
+      await tx.wait()
+      showToast('Tax authority added', 'success')
+      setTaxAuthAddr('')
+    } catch (err: unknown) {
+      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+    } finally { setLoading(null) }
+  }
+
+  const handleSetMinWage = async () => {
+    if (!contract) return
+    const val = parseInt(minWageInput)
+    if (!val || val <= 0) { showToast('Enter valid minimum wage', 'error'); return }
+    setLoading('setMinWage')
+    try {
+      const tx = await contract.setMinimumWage(val)
+      await tx.wait()
+      showToast('Minimum wage set to ' + val, 'success')
+      setMinWageInput('')
+    } catch (err: unknown) {
+      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+    } finally { setLoading(null) }
+  }
+
+  const handleSolvencyCheck = async () => {
+    if (!contract) return
+    setLoading('solvency')
+    try {
+      const tx = await contract.complianceCheck()
+      await tx.wait()
+      showToast('Solvency check executed. Use decrypt to view result.', 'success')
+    } catch (err: unknown) {
+      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+    } finally { setLoading(null) }
+  }
+
+  const handleDecryptSolvency = async () => {
+    if (!contract || !provider || !fhevmRef.current) { showToast('FHE SDK not ready', 'error'); return }
+    setLoading('decryptSolvency')
+    try {
+      const encHandle = await contract.viewSolvencyResult()
+      const handleHex = ethers.hexlify(encHandle)
+      const signer = await provider.getSigner()
+      // Use userDecrypt for ebool — treated as euint8 where 1=true, 0=false
+      const { publicKey, privateKey } = fhevmRef.current.generateKeypair()
+      const startTimestamp = Math.floor(Date.now() / 1000)
+      const eip712 = fhevmRef.current.createEIP712(publicKey, [contractAddress], startTimestamp, 1)
+      const signature = await signer.signTypedData(
+        eip712.domain as Record<string, unknown>,
+        eip712.types as unknown as Record<string, ethers.TypedDataField[]>,
+        eip712.message as Record<string, unknown>,
+      )
+      const results = await fhevmRef.current.userDecrypt(
+        [{ handle: handleHex, contractAddress }],
+        privateKey, publicKey, signature,
+        [contractAddress], await signer.getAddress(), startTimestamp, 1,
+      )
+      const val = results[handleHex as `0x${string}`]
+      showToast(val ? '✅ Company is SOLVENT' : '❌ Company is INSOLVENT', val ? 'success' : 'error')
+    } catch (err: unknown) {
+      showToast((err instanceof Error ? err.message : 'Decrypt failed').slice(0, 120), 'error')
+    } finally { setLoading(null) }
+  }
+
+  const handleVerifyMinWage = async (addr?: string) => {
+    if (!contract) return
+    setLoading('verifyMinWage')
+    try {
+      if (addr) {
+        const tx = await contract.verifyMinimumWage(addr)
+        await tx.wait()
+        showToast('Min wage check done for ' + addr.slice(0, 8) + '...', 'success')
+      } else {
+        const tx = await contract.verifyAllMinimumWage()
+        await tx.wait()
+        showToast('Batch min wage check done. Decrypt to view.', 'success')
+      }
+    } catch (err: unknown) {
+      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+    } finally { setLoading(null) }
+  }
+
+  const handleDecryptTotalExpense = async () => {
+    if (!contract || !provider || !fhevmRef.current) { showToast('FHE SDK not ready', 'error'); return }
+    setLoading('decryptExpense')
+    try {
+      let encHandle
+      if (isAuditor) encHandle = await contract.viewTotalExpense()
+      else if (isTaxAuthority) encHandle = await contract.viewTotalExpenseAsTax()
+      else { showToast('Not authorized', 'error'); return }
+      const handleHex = ethers.hexlify(encHandle)
+      const signer = await provider.getSigner()
+      const value = await userDecryptHandle(fhevmRef.current, handleHex, contractAddress, signer)
+      showToast('Total payroll expense: ' + value.toString(), 'success')
+    } catch (err: unknown) {
+      showToast((err instanceof Error ? err.message : 'Decrypt failed').slice(0, 120), 'error')
+    } finally { setLoading(null) }
+  }
+
   // Wallet Modal
   const WalletModal = () => (
     <div
@@ -579,15 +914,14 @@ function App() {
     return (
       <div className="app">
         <div className="header">
-          <h1>🔐 Confidential Payroll</h1>
-          <p>Private salary payments powered by Zama FHE</p>
+          <h1>🔐 ConfidentialCorp</h1>
+          <p>Enterprise Privacy Platform powered by Zama FHE</p>
         </div>
         <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
           <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>💼</div>
-          <h2 style={{ justifyContent: 'center', marginBottom: '0.5rem' }}>On-chain payroll with encrypted salaries</h2>
+          <h2 style={{ justifyContent: 'center', marginBottom: '0.5rem' }}>Private Payroll · Board Governance · Tax Compliance</h2>
           <p style={{ color: 'var(--text-dim)', maxWidth: '500px', margin: '0 auto 2rem' }}>
-            Salary amounts are encrypted end-to-end using Fully Homomorphic Encryption.
-            Only the employer and each employee can see their own salary.
+            Encrypted payroll, board voting, and regulatory compliance — all powered by Fully Homomorphic Encryption. Data stays private even during computation.
           </p>
           <button className="btn btn-primary" onClick={openWalletModal} disabled={loading === 'connect'}>
             {loading === 'connect' ? <><span className="loading"></span>Connecting...</> : '🔗 Connect Wallet'}
@@ -612,7 +946,7 @@ function App() {
   if (showSetup || !contractAddress) {
     return (
       <div className="app">
-        <div className="header"><h1>🔐 Confidential Payroll</h1></div>
+        <div className="header"><h1>🔐 ConfidentialCorp</h1></div>
         <div className="network-bar">
           <div><span className="network-dot"></span>Connected: {shortAddr(account)}</div>
           <div style={{ color: 'var(--accent)', fontSize: '0.8rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
@@ -633,11 +967,15 @@ function App() {
   return (
     <div className="app">
       <div className="header">
-        <h1>🔐 Confidential Payroll</h1>
+        <h1>🔐 ConfidentialCorp</h1>
         <p>
-          {companyName || 'Confidential Payroll'}
+          {companyName || 'Enterprise Privacy Platform'}
           {isEmployer && <span className="badge badge-employer">Employer</span>}
           {isEmployee && <span className="badge badge-employee">Employee</span>}
+          {isAdmin && <span className="badge badge-employer">Gov Admin</span>}
+          {isBoardMember && <span className="badge badge-employee">Board</span>}
+          {isAuditor && <span className="badge badge-encrypted">Auditor</span>}
+          {isTaxAuthority && <span className="badge badge-encrypted">Tax Auth</span>}
         </p>
       </div>
 
@@ -655,6 +993,25 @@ function App() {
           </button>
         </div>
       </div>
+
+      {/* Tab Navigation */}
+      <div style={{ display: 'flex', gap: '0', margin: '0 auto', maxWidth: '800px', width: '100%', borderBottom: '1px solid var(--border)' }}>
+        {(['payroll', 'governance', 'compliance'] as const).map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)}
+            style={{
+              flex: 1, padding: '0.75rem 1rem', background: activeTab === tab ? 'var(--card)' : 'transparent',
+              border: 'none', borderBottom: activeTab === tab ? '2px solid var(--accent)' : '2px solid transparent',
+              color: activeTab === tab ? 'var(--accent)' : 'var(--text-dim)', cursor: 'pointer',
+              fontWeight: activeTab === tab ? 600 : 400, fontSize: '0.95rem', transition: 'all 0.2s',
+              textTransform: 'capitalize',
+            }}>
+            {tab === 'payroll' ? '💰 Payroll' : tab === 'governance' ? '🗳️ Governance' : '📋 Compliance'}
+          </button>
+        ))}
+      </div>
+
+      {/* ========== PAYROLL TAB ========== */}
+      {activeTab === 'payroll' && <>
 
       {/* Employer Dashboard */}
       {isEmployer && (
@@ -804,6 +1161,278 @@ function App() {
           </div>
         </div>
       )}
+
+      </>}
+
+      {/* ========== GOVERNANCE TAB ========== */}
+      {activeTab === 'governance' && <>
+        {!govContractAddress ? (
+          <div className="card" style={{ maxWidth: '520px', margin: '2rem auto' }}>
+            <h2>🗳️ Board Governance</h2>
+            <p style={{ color: 'var(--text-dim)', marginBottom: '1.5rem' }}>Deploy a new governance contract or connect to an existing one.</p>
+            <div className="input-group">
+              <label>Organization Name</label>
+              <input type="text" placeholder="e.g. Zama Corp Board" value={deployGovOrgName} onChange={e => setDeployGovOrgName(e.target.value)} />
+            </div>
+            <button className="btn btn-primary" style={{ width: '100%', marginBottom: '1rem' }}
+              onClick={handleDeployGov} disabled={loading === 'deployGov' || !deployGovOrgName.trim()}>
+              {loading === 'deployGov' ? <><span className="loading"></span>Deploying...</> : '🚀 Deploy Governance Contract'}
+            </button>
+            <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '1rem 0' }} />
+            <div className="input-group">
+              <label>Or Enter Existing Contract Address</label>
+              <input type="text" placeholder="0x..." onKeyDown={e => { if (e.key === 'Enter') handleConnectGov((e.target as HTMLInputElement).value) }}
+                onChange={e => { if (ethers.isAddress(e.target.value)) handleConnectGov(e.target.value) }} />
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="card" style={{ borderColor: 'var(--accent)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2>🗳️ {govOrgName || 'Governance'}</h2>
+                <button className="btn btn-outline" style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }} onClick={handleClearGov}>Change Contract</button>
+              </div>
+              <div className="info-row">
+                <span className="info-label">Contract</span>
+                <span style={{ fontSize: '0.85rem' }}>{shortAddr(govContractAddress)}</span>
+              </div>
+              <div className="info-row">
+                <span className="info-label">Board Members</span>
+                <span>{boardMembers.length}</span>
+              </div>
+              <div className="info-row">
+                <span className="info-label">Proposals</span>
+                <span>{proposals.length}</span>
+              </div>
+            </div>
+
+            {/* Admin: manage board */}
+            {isAdmin && (
+              <div className="card">
+                <h2>👥 Board Management</h2>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <input type="text" placeholder="Board member address 0x..." value={newMemberAddr}
+                    onChange={e => setNewMemberAddr(e.target.value)}
+                    style={{ flex: 1, padding: '0.6rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)' }} />
+                  <button className="btn btn-primary" onClick={handleAddBoardMember} disabled={loading === 'addMember'}>
+                    {loading === 'addMember' ? <span className="loading"></span> : '+ Add'}
+                  </button>
+                </div>
+                {boardMembers.length > 0 && (
+                  <table>
+                    <thead><tr><th>Member</th><th>Actions</th></tr></thead>
+                    <tbody>
+                      {boardMembers.map(m => (
+                        <tr key={m}>
+                          <td title={m}>{shortAddr(m)}</td>
+                          <td><button className="btn btn-danger" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
+                            onClick={() => handleRemoveBoardMember(m)}>Remove</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+
+            {/* Admin: create proposal */}
+            {isAdmin && (
+              <div className="card">
+                <h2>📝 Create Proposal</h2>
+                <div className="input-group">
+                  <label>Title</label>
+                  <input type="text" placeholder="e.g. Increase Q2 Budget" value={proposalTitle} onChange={e => setProposalTitle(e.target.value)} />
+                </div>
+                <div className="input-group">
+                  <label>Description</label>
+                  <input type="text" placeholder="Details of the proposal..." value={proposalDesc} onChange={e => setProposalDesc(e.target.value)} />
+                </div>
+                <div className="input-group">
+                  <label>Voting Duration (seconds)</label>
+                  <input type="number" placeholder="3600 = 1 hour" value={proposalDuration} onChange={e => setProposalDuration(e.target.value)} />
+                </div>
+                <button className="btn btn-primary" onClick={handleCreateProposal} disabled={loading === 'createProposal'}>
+                  {loading === 'createProposal' ? <><span className="loading"></span>Creating...</> : '+ Create Proposal'}
+                </button>
+              </div>
+            )}
+
+            {/* Proposals list */}
+            <div className="card">
+              <h2>📋 Proposals ({proposals.length})</h2>
+              {proposals.length === 0 ? (
+                <p style={{ color: 'var(--text-dim)', textAlign: 'center', padding: '1rem' }}>No proposals yet</p>
+              ) : proposals.map(p => {
+                const now = Math.floor(Date.now() / 1000)
+                const isActive = now >= p.startTime && now <= p.endTime && !p.isFinalized
+                const isEnded = now > p.endTime
+                const hasUserVoted = false // we check on-chain below
+                return (
+                  <div key={p.id} style={{ border: '1px solid var(--border)', borderRadius: '10px', padding: '1rem', marginBottom: '0.75rem', background: 'var(--bg)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <strong>#{p.id}: {p.title}</strong>
+                      <span className={'badge ' + (p.isFinalized ? 'badge-employer' : isActive ? 'badge-employee' : 'badge-encrypted')}>
+                        {p.isFinalized ? 'Finalized' : isActive ? 'Active' : isEnded ? 'Ended' : 'Pending'}
+                      </span>
+                    </div>
+                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>{p.description}</p>
+                    <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '0.75rem' }}>
+                      <span>Voters: {p.voterCount}</span>
+                      <span>·</span>
+                      <span>Ends: {new Date(p.endTime * 1000).toLocaleString()}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      {isActive && isBoardMember && (
+                        <>
+                          <button className="btn btn-success" style={{ fontSize: '0.85rem', padding: '0.4rem 1rem' }}
+                            onClick={() => handleVote(p.id, true)} disabled={loading === 'vote-' + p.id}>
+                            {loading === 'vote-' + p.id ? <span className="loading"></span> : '👍 Vote YES'}
+                          </button>
+                          <button className="btn btn-danger" style={{ fontSize: '0.85rem', padding: '0.4rem 1rem' }}
+                            onClick={() => handleVote(p.id, false)} disabled={loading === 'vote-' + p.id}>
+                            {loading === 'vote-' + p.id ? <span className="loading"></span> : '👎 Vote NO'}
+                          </button>
+                        </>
+                      )}
+                      {isEnded && !p.isFinalized && isAdmin && (
+                        <button className="btn btn-primary" style={{ fontSize: '0.85rem', padding: '0.4rem 1rem' }}
+                          onClick={() => handleFinalize(p.id)} disabled={loading === 'finalize-' + p.id}>
+                          {loading === 'finalize-' + p.id ? <span className="loading"></span> : '🔓 Finalize'}
+                        </button>
+                      )}
+                      {(p.isFinalized || isAdmin) && (
+                        <button className="btn btn-outline" style={{ fontSize: '0.85rem', padding: '0.4rem 1rem' }}
+                          onClick={() => handleDecryptVoteCounts(p.id)} disabled={loading === 'decrypt-' + p.id}>
+                          {loading === 'decrypt-' + p.id ? <span className="loading"></span> : '🔓 Decrypt Results'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Share governance contract */}
+            <div className="card" style={{ borderColor: 'var(--accent)' }}>
+              <h2>📋 Share with Board Members</h2>
+              <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
+                Share this governance contract address with board members.
+              </p>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <code style={{ flex: 1, padding: '0.6rem', background: 'var(--bg)', borderRadius: '6px', fontSize: '0.85rem', wordBreak: 'break-all' }}>
+                  {govContractAddress}
+                </code>
+                <button className="btn btn-outline" style={{ padding: '0.5rem 0.75rem', whiteSpace: 'nowrap' }}
+                  onClick={() => { navigator.clipboard.writeText(govContractAddress); showToast('Copied!', 'success') }}>
+                  Copy
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </>}
+
+      {/* ========== COMPLIANCE TAB ========== */}
+      {activeTab === 'compliance' && <>
+        {!contractAddress ? (
+          <div className="card" style={{ textAlign: 'center', padding: '2rem' }}>
+            <p style={{ color: 'var(--text-dim)' }}>Connect to a payroll contract first (Payroll tab → Setup)</p>
+          </div>
+        ) : (
+          <>
+            {/* Employer: Role Management */}
+            {isEmployer && (
+              <div className="card">
+                <h2>🔑 Role Management</h2>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <input type="text" placeholder="Auditor address 0x..." value={auditorAddr}
+                    onChange={e => setAuditorAddr(e.target.value)}
+                    style={{ flex: 1, padding: '0.6rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)' }} />
+                  <button className="btn btn-primary" onClick={handleAddAuditor} disabled={loading === 'addAuditor'}>
+                    {loading === 'addAuditor' ? <span className="loading"></span> : '+ Auditor'}
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <input type="text" placeholder="Tax authority address 0x..." value={taxAuthAddr}
+                    onChange={e => setTaxAuthAddr(e.target.value)}
+                    style={{ flex: 1, padding: '0.6rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)' }} />
+                  <button className="btn btn-primary" onClick={handleAddTaxAuthority} disabled={loading === 'addTax'}>
+                    {loading === 'addTax' ? <span className="loading"></span> : '+ Tax Auth'}
+                  </button>
+                </div>
+                <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '1rem 0' }} />
+                <h3 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>Minimum Wage</h3>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input type="number" placeholder="Set minimum wage" value={minWageInput}
+                    onChange={e => setMinWageInput(e.target.value)}
+                    style={{ flex: 1, padding: '0.6rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)' }} />
+                  <button className="btn btn-primary" onClick={handleSetMinWage} disabled={loading === 'setMinWage'}>
+                    {loading === 'setMinWage' ? <span className="loading"></span> : 'Set'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Auditor Panel */}
+            {isAuditor && (
+              <div className="card">
+                <h2>🔍 Auditor Panel</h2>
+                <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+                  As an auditor, you can view encrypted aggregates and check solvency without seeing individual salaries.
+                </p>
+                <div className="actions">
+                  <button className="btn btn-primary" onClick={handleDecryptTotalExpense} disabled={loading === 'decryptExpense'}>
+                    {loading === 'decryptExpense' ? <><span className="loading"></span>Decrypting...</> : '💰 Decrypt Total Expense'}
+                  </button>
+                  <button className="btn btn-outline" onClick={handleSolvencyCheck} disabled={loading === 'solvency'}>
+                    {loading === 'solvency' ? <><span className="loading"></span>Checking...</> : '🏦 Run Solvency Check'}
+                  </button>
+                  <button className="btn btn-success" onClick={handleDecryptSolvency} disabled={loading === 'decryptSolvency'}>
+                    {loading === 'decryptSolvency' ? <><span className="loading"></span>Decrypting...</> : '🔓 Decrypt Solvency'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Tax Authority Panel */}
+            {isTaxAuthority && (
+              <div className="card">
+                <h2>🏛️ Tax Authority Panel</h2>
+                <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+                  Verify minimum wage compliance and view aggregate payroll data — no individual salaries exposed.
+                </p>
+                <div className="actions" style={{ marginBottom: '1rem' }}>
+                  <button className="btn btn-primary" onClick={handleDecryptTotalExpense} disabled={loading === 'decryptExpense'}>
+                    {loading === 'decryptExpense' ? <><span className="loading"></span>Decrypting...</> : '💰 Decrypt Total Expense'}
+                  </button>
+                  <button className="btn btn-outline" onClick={() => handleVerifyMinWage()} disabled={loading === 'verifyMinWage'}>
+                    {loading === 'verifyMinWage' ? <><span className="loading"></span>Checking...</> : '✅ Verify All Min Wage'}
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input type="text" placeholder="Employee address for individual check" value={minWageCheckAddr}
+                    onChange={e => setMinWageCheckAddr(e.target.value)}
+                    style={{ flex: 1, padding: '0.6rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)' }} />
+                  <button className="btn btn-outline" onClick={() => handleVerifyMinWage(minWageCheckAddr)} disabled={loading === 'verifyMinWage'}>
+                    Check Individual
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* No compliance role */}
+            {!isEmployer && !isAuditor && !isTaxAuthority && (
+              <div className="card" style={{ textAlign: 'center', padding: '2rem' }}>
+                <div className="lock-icon">🔒</div>
+                <h2 style={{ justifyContent: 'center' }}>No Compliance Access</h2>
+                <p style={{ color: 'var(--text-dim)' }}>
+                  Your address is not registered as an employer, auditor, or tax authority for this contract.
+                </p>
+              </div>
+            )}
+          </>
+        )}
+      </>}
 
       {toast && <div className={'toast toast-' + toast.type}>{toast.msg}</div>}
       {showWalletModal && <WalletModal />}

@@ -19,7 +19,15 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   });
 
   console.log(`ConfidentialPayroll contract: `, deployedPayroll.address);
+
+  const deployedGovernance = await deploy("ConfidentialGovernance", {
+    from: deployer,
+    args: ["Zama Corp Board"],
+    log: true,
+  });
+
+  console.log(`ConfidentialGovernance contract: `, deployedGovernance.address);
 };
 export default func;
 func.id = "deploy_all";
-func.tags = ["FHECounter", "ConfidentialPayroll"];
+func.tags = ["FHECounter", "ConfidentialPayroll", "ConfidentialGovernance"];
