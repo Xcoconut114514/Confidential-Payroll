@@ -97,6 +97,7 @@ function App() {
   const [showWalletModal, setShowWalletModal] = useState(false)
   const [wallets, setWallets] = useState<WalletOption[]>([])
   const [networkName, setNetworkName] = useState('')
+  const activeProviderRef = useRef<EIP1193Provider | null>(null)
 
   // Setup flow state
   const [showSetup, setShowSetup] = useState(false)
@@ -133,16 +134,49 @@ function App() {
     }
   }
 
+  const handleDisconnect = () => {
+    // Remove listeners from the active provider
+    if (activeProviderRef.current) {
+      try { activeProviderRef.current.removeAllListeners('accountsChanged') } catch { /* ignore */ }
+      try { activeProviderRef.current.removeAllListeners('chainChanged') } catch { /* ignore */ }
+      activeProviderRef.current = null
+    }
+    setAccount(null)
+    setProvider(null)
+    setContract(null)
+    setIsEmployer(false)
+    setIsEmployee(false)
+    setCompanyName('')
+    setEmployees([])
+    fhevmRef.current = null
+    setNetworkName('')
+    openWalletModal()
+  }
+
   const connectWallet = async (wallet: WalletOption) => {
     if (!wallet.provider) { showToast(wallet.name + ' not detected. Please install it.', 'error'); return }
     setShowWalletModal(false)
     setLoading('connect')
     try {
+      // wallet_requestPermissions forces the wallet to show the account-picker UI
+      // even if this site already has permission (prevents auto-connecting cached account)
+      try {
+        await wallet.provider.request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] })
+      } catch {
+        // Some wallets don't support this — fall through to eth_requestAccounts
+      }
       const accounts = await wallet.provider.request({ method: 'eth_requestAccounts' }) as string[]
       try { await switchToTargetNetwork(wallet.provider) } catch { showToast('Could not auto-switch network', 'error') }
       const prov = new ethers.BrowserProvider(wallet.provider as ethers.Eip1193Provider)
       const network = await prov.getNetwork()
       setNetworkName(network.name === 'unknown' ? 'Chain ' + network.chainId : network.name)
+      activeProviderRef.current = wallet.provider
+      wallet.provider.on('accountsChanged', (accs) => {
+        const newAccs = accs as string[]
+        if (!newAccs || newAccs.length === 0) { handleDisconnect(); return }
+        setAccount(newAccs[0])
+      })
+      wallet.provider.on('chainChanged', () => window.location.reload())
       setProvider(prov)
       setAccount(accounts[0])
 
@@ -240,13 +274,7 @@ function App() {
 
   useEffect(() => { loadContractData() }, [loadContractData])
 
-  useEffect(() => {
-    const eth = (window as unknown as { ethereum?: EIP1193Provider }).ethereum
-    if (eth) {
-      eth.on('accountsChanged', () => window.location.reload())
-      eth.on('chainChanged', () => window.location.reload())
-    }
-  }, [])
+  // global provider event listeners removed — handled per-wallet in connectWallet
 
   // Employer: Deposit
   const handleDeposit = async () => {
@@ -569,7 +597,13 @@ function App() {
         <div className="header"><h1>🔐 Confidential Payroll</h1></div>
         <div className="network-bar">
           <div><span className="network-dot"></span>Connected: {shortAddr(account)}</div>
-          <div style={{ color: 'var(--accent)', fontSize: '0.8rem' }}>{networkName}</div>
+          <div style={{ color: 'var(--accent)', fontSize: '0.8rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <span>{networkName}</span>
+            <button onClick={handleDisconnect}
+              style={{ fontSize: '0.75rem', color: 'var(--text-dim)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+              Switch Wallet
+            </button>
+          </div>
         </div>
         {renderSetupScreen()}
         {toast && <div className={'toast toast-' + toast.type}>{toast.msg}</div>}
@@ -596,6 +630,10 @@ function App() {
           <button onClick={handleClearContract}
             style={{ fontSize: '0.75rem', color: 'var(--text-dim)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
             Change Contract
+          </button>
+          <button onClick={handleDisconnect}
+            style={{ fontSize: '0.75rem', color: 'var(--text-dim)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+            Switch Wallet
           </button>
         </div>
       </div>
