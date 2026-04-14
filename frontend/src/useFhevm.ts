@@ -23,21 +23,25 @@ export function useFhevm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const init = useCallback(async (provider: ethers.BrowserProvider) => {
+  /**
+   * Pass the RAW EIP-1193 provider (wallet.provider / window.ethereum),
+   * NOT the ethers BrowserProvider wrapper.
+   */
+  const init = useCallback(async (rawProvider: ethers.Eip1193Provider) => {
     if (instance) return instance
     setLoading(true)
     setError(null)
     try {
-      const ethersProvider = provider as unknown as import('ethers').Eip1193Provider
       const fhevm = await createInstance({
         ...SepoliaConfig,
-        network: ethersProvider,
+        network: rawProvider,
       })
       setInstance(fhevm)
       return fhevm
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to init FHE SDK'
       setError(msg)
+      console.error('[useFhevm] init error:', e)
       return null
     } finally {
       setLoading(false)
