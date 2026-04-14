@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { ethers } from 'ethers'
 import ABI from './abi.json'
+import { useFhevm } from './useFhevm'
 
 // --- Config ---
 const CONTRACT_ADDRESS = '0x6dF4438C80D908B450a214eEF2A8DAAC748936AE'
@@ -175,10 +176,18 @@ function App() {
   const [wallets, setWallets] = useState<WalletOption[]>([])
   const [networkName, setNetworkName] = useState('')
 
+  // FHE SDK
+  const { init: initFhevm, encryptUint64, userDecryptHandle } = useFhevm()
+  const fhevmRef = useRef<import('@zama-fhe/relayer-sdk/web').FhevmInstance | null>(null)
+
   // Form state
   const [newEmpAddress, setNewEmpAddress] = useState('')
   const [newEmpSalary, setNewEmpSalary] = useState('')
   const [depositAmount, setDepositAmount] = useState('')
+
+  // Salary/balance display values (decrypted)
+  const [mySalary, setMySalary] = useState<bigint | null>(null)
+  const [myBalance, setMyBalance] = useState<bigint | null>(null)
 
   const showToast = (msg: string, type: Toast['type'] = 'info') => {
     setToast({ msg, type })
@@ -235,7 +244,16 @@ function App() {
       setNetworkName(network.name === 'unknown' ? `Chain ${network.chainId}` : network.name)
       setProvider(prov)
       setAccount(accounts[0])
-      showToast(`${wallet.name} connected!`, 'success')
+
+      // Initialize FHE SDK after wallet connects (only on Sepolia)
+      if (Number(network.chainId) === 11155111) {
+        const fhevm = await initFhevm(prov)
+        fhevmRef.current = fhevm
+        if (fhevm) showToast('Wallet + FHE SDK ready!', 'success')
+        else showToast('Wallet connected (FHE SDK failed to init)', 'info')
+      } else {
+        showToast('Wallet connected!', 'success')
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Connection failed'
       showToast(msg.slice(0, 100), 'error')
@@ -247,7 +265,7 @@ function App() {
   // --- Load Contract Data ---
   const loadContractData = useCallback(async () => {
     if (!provider || !account) return
-    if (CONTRACT_ADDRESS === '0x0000000000000000000000000000000000000000') return
+    if ((CONTRACT_ADDRESS as string) === '0x0000000000000000000000000000000000000000') return
 
     try {
       const signer = await provider.getSigner()
@@ -301,25 +319,32 @@ function App() {
 
     setLoading('deposit')
     try {
-      // For local/mock mode, we encode the amount directly
-      // In production with FHE, this would use fhevmjs SDK to encrypt
       const signer = await provider.getSigner()
-      const amountBn = BigInt(amount)
+      const userAddress = await signer.getAddress()
 
-      // Create a mock encrypted input (for localhost demo)
-      // On real FHE network, replace with fhevmjs.createEncryptedInput()
-      const abiCoder = ethers.AbiCoder.defaultAbiCoder()
-      const handle = ethers.keccak256(abiCoder.encode(['uint64', 'address'], [amountBn, await signer.getAddress()]))
-      const proof = '0x'
+      let handle: string
+      let inputProof: string
 
-      const tx = await contract.deposit(handle, proof)
+      if (fhevmRef.current) {
+        // Real FHE encryption via Zama relayer
+        const enc = await encryptUint64(fhevmRef.current, BigInt(amount), CONTRACT_ADDRESS, userAddress)
+        handle = enc.handle
+        inputProof = enc.inputProof
+      } else {
+        // Fallback mock (localhost only)
+        const abiCoder = ethers.AbiCoder.defaultAbiCoder()
+        handle = ethers.keccak256(abiCoder.encode(['uint64', 'address'], [BigInt(amount), userAddress]))
+        inputProof = '0x'
+      }
+
+      const tx = await contract.deposit(handle, inputProof)
       await tx.wait()
       showToast(`Deposited ${amount} to treasury`, 'success')
       setDepositAmount('')
       await loadContractData()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Transaction failed'
-      showToast(msg.slice(0, 100), 'error')
+      showToast(msg.slice(0, 120), 'error')
     } finally {
       setLoading(null)
     }
@@ -334,19 +359,30 @@ function App() {
     setLoading('addEmployee')
     try {
       const signer = await provider.getSigner()
-      const abiCoder = ethers.AbiCoder.defaultAbiCoder()
-      const handle = ethers.keccak256(abiCoder.encode(['uint64', 'address'], [BigInt(salary), await signer.getAddress()]))
-      const proof = '0x'
+      const userAddress = await signer.getAddress()
 
-      const tx = await contract.addEmployee(newEmpAddress, handle, proof)
+      let handle: string
+      let inputProof: string
+
+      if (fhevmRef.current) {
+        const enc = await encryptUint64(fhevmRef.current, BigInt(salary), CONTRACT_ADDRESS, userAddress)
+        handle = enc.handle
+        inputProof = enc.inputProof
+      } else {
+        const abiCoder = ethers.AbiCoder.defaultAbiCoder()
+        handle = ethers.keccak256(abiCoder.encode(['uint64', 'address'], [BigInt(salary), userAddress]))
+        inputProof = '0x'
+      }
+
+      const tx = await contract.addEmployee(newEmpAddress, handle, inputProof)
       await tx.wait()
-      showToast(`Employee added!`, 'success')
+      showToast('Employee added!', 'success')
       setNewEmpAddress('')
       setNewEmpSalary('')
       await loadContractData()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Transaction failed'
-      showToast(msg.slice(0, 100), 'error')
+      showToast(msg.slice(0, 120), 'error')
     } finally {
       setLoading(null)
     }
@@ -402,30 +438,48 @@ function App() {
 
   // --- Employee Actions ---
   const handleViewSalary = async () => {
-    if (!contract) return
+    if (!contract || !provider) return
     setLoading('viewSalary')
     try {
-      const encSalary = await contract.viewMySalary()
-      // In mock mode, handle is the value itself; in production, decrypt via fhevmjs
-      showToast(`Your encrypted salary handle: ${encSalary.toString().slice(0, 18)}...`, 'info')
-      // TODO: In production, use fhevmjs.userDecryptEuint() to get the clear value
+      const encSalaryHandle = await contract.viewMySalary()
+      const handleHex = ethers.hexlify(encSalaryHandle)
+
+      if (fhevmRef.current) {
+        showToast('Requesting decryption — please sign the MetaMask prompt...', 'info')
+        const signer = await provider.getSigner()
+        const value = await userDecryptHandle(fhevmRef.current, handleHex, CONTRACT_ADDRESS, signer)
+        setMySalary(value)
+        showToast(`Your salary: ${value.toString()}`, 'success')
+      } else {
+        showToast(`Encrypted handle: ${handleHex.slice(0, 20)}... (FHE SDK not available)`, 'info')
+      }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Transaction failed'
-      showToast(msg.slice(0, 100), 'error')
+      const msg = err instanceof Error ? err.message : 'Decryption failed'
+      showToast(msg.slice(0, 120), 'error')
     } finally {
       setLoading(null)
     }
   }
 
   const handleViewBalance = async () => {
-    if (!contract) return
+    if (!contract || !provider) return
     setLoading('viewBalance')
     try {
-      const encBalance = await contract.viewMyBalance()
-      showToast(`Your encrypted balance handle: ${encBalance.toString().slice(0, 18)}...`, 'info')
+      const encBalanceHandle = await contract.viewMyBalance()
+      const handleHex = ethers.hexlify(encBalanceHandle)
+
+      if (fhevmRef.current) {
+        showToast('Requesting decryption — please sign the MetaMask prompt...', 'info')
+        const signer = await provider.getSigner()
+        const value = await userDecryptHandle(fhevmRef.current, handleHex, CONTRACT_ADDRESS, signer)
+        setMyBalance(value)
+        showToast(`Your balance: ${value.toString()}`, 'success')
+      } else {
+        showToast(`Encrypted handle: ${handleHex.slice(0, 20)}... (FHE SDK not available)`, 'info')
+      }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Transaction failed'
-      showToast(msg.slice(0, 100), 'error')
+      const msg = err instanceof Error ? err.message : 'Decryption failed'
+      showToast(msg.slice(0, 120), 'error')
     } finally {
       setLoading(null)
     }
@@ -564,7 +618,7 @@ function App() {
     )
   }
 
-  const notConfigured = CONTRACT_ADDRESS === '0x0000000000000000000000000000000000000000'
+  const notConfigured = (CONTRACT_ADDRESS as string) === '0x0000000000000000000000000000000000000000'
 
   // --- Connected ---
   return (
@@ -711,19 +765,32 @@ function App() {
 
           <div className="info-row">
             <span className="info-label">My Salary</span>
-            <span className="encrypted-value">🔒 Encrypted (only you can decrypt)</span>
+            {mySalary !== null
+              ? <span className="info-value">{mySalary.toString()} <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>units</span></span>
+              : <span className="encrypted-value">🔒 Click below to decrypt</span>}
+          </div>
+          <div className="info-row">
+            <span className="info-label">My Balance</span>
+            {myBalance !== null
+              ? <span className="info-value">{myBalance.toString()} <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>units</span></span>
+              : <span className="encrypted-value">🔒 Click below to decrypt</span>}
           </div>
           <div className="info-row">
             <span className="info-label">This Cycle</span>
             <span>{paidStatus[account] ? '✅ Paid' : '⏳ Pending'}</span>
           </div>
+          {!fhevmRef.current && (
+            <p style={{ color: 'var(--warning)', fontSize: '0.8rem', marginTop: '0.5rem' }}>
+              ⚠️ FHE SDK not ready — connect on Sepolia to decrypt values
+            </p>
+          )}
 
           <div className="actions">
             <button className="btn btn-primary" onClick={handleViewSalary} disabled={loading === 'viewSalary'}>
-              {loading === 'viewSalary' ? <><span className="loading"></span></> : '🔓 View My Salary'}
+              {loading === 'viewSalary' ? <><span className="loading"></span>Decrypting...</> : '🔓 Decrypt Salary'}
             </button>
             <button className="btn btn-outline" onClick={handleViewBalance} disabled={loading === 'viewBalance'}>
-              {loading === 'viewBalance' ? <><span className="loading"></span></> : '💰 View Balance'}
+              {loading === 'viewBalance' ? <><span className="loading"></span>Decrypting...</> : '💰 Decrypt Balance'}
             </button>
             <button className="btn btn-success" onClick={handleWithdraw} disabled={loading === 'withdraw'}>
               {loading === 'withdraw' ? <><span className="loading"></span></> : '📤 Withdraw'}
