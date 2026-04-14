@@ -164,6 +164,15 @@ function App() {
     setShowWalletModal(false)
     setLoading('connect')
     try {
+      // Step 1: Revoke existing permissions on THIS wallet so it forgets cached accounts
+      try {
+        await wallet.provider.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] })
+      } catch { /* not all wallets support this */ }
+      // Step 2: Request fresh permissions — forces the wallet to show account-picker UI
+      try {
+        await wallet.provider.request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] })
+      } catch { /* fallback: some wallets only support eth_requestAccounts */ }
+      // Step 3: Get the selected account
       const accounts = await wallet.provider.request({ method: 'eth_requestAccounts' }) as string[]
       try { await switchToTargetNetwork(wallet.provider) } catch { showToast('Could not auto-switch network', 'error') }
       const prov = new ethers.BrowserProvider(wallet.provider as ethers.Eip1193Provider)
