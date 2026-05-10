@@ -121,13 +121,13 @@ function detectWallets(): WalletOption[] {
   const coinbase = find(p => !!p.isCoinbaseWallet)
   const brave = find(p => !!p.isBraveWallet)
   return [
-    { id: 'metamask', name: 'MetaMask', icon: '🦊', provider: metamask, available: !!metamask, description: 'Most popular EVM wallet' },
-    { id: 'okx', name: 'OKX Wallet', icon: '⭕', provider: okx, available: !!okx, description: 'OKX multi-chain wallet' },
-    { id: 'bitget', name: 'Bitget Wallet', icon: '🅱', provider: bitget, available: !!bitget, description: 'Bitget Web3 wallet' },
-    { id: 'phantom', name: 'Phantom (EVM)', icon: '👻', provider: phantom, available: !!phantom, description: 'Phantom Ethereum wallet' },
-    { id: 'coinbase', name: 'Coinbase Wallet', icon: '🔵', provider: coinbase, available: !!coinbase, description: 'Coinbase self-custody wallet' },
-    { id: 'brave', name: 'Brave Wallet', icon: '🦁', provider: brave, available: !!brave, description: 'Built-in Brave browser wallet' },
-    { id: 'generic', name: 'Other Wallet', icon: '🌐', provider: eth ?? null, available: !!eth, description: 'Any other injected wallet' },
+    { id: 'metamask', name: 'MetaMask', icon: 'đź¦Š', provider: metamask, available: !!metamask, description: 'Most popular EVM wallet' },
+    { id: 'okx', name: 'OKX Wallet', icon: 'â­•', provider: okx, available: !!okx, description: 'OKX multi-chain wallet' },
+    { id: 'bitget', name: 'Bitget Wallet', icon: 'đź…±', provider: bitget, available: !!bitget, description: 'Bitget Web3 wallet' },
+    { id: 'phantom', name: 'Phantom (EVM)', icon: 'đź‘»', provider: phantom, available: !!phantom, description: 'Phantom Ethereum wallet' },
+    { id: 'coinbase', name: 'Coinbase Wallet', icon: 'đź”µ', provider: coinbase, available: !!coinbase, description: 'Coinbase self-custody wallet' },
+    { id: 'brave', name: 'Brave Wallet', icon: 'đź¦', provider: brave, available: !!brave, description: 'Built-in Brave browser wallet' },
+    { id: 'generic', name: 'Other Wallet', icon: 'đźŚ', provider: eth ?? null, available: !!eth, description: 'Any other injected wallet' },
   ]
 }
 
@@ -221,7 +221,7 @@ function App() {
 
   const handleDisconnect = () => {
     if (activeProviderRef.current) {
-      // Fire-and-forget: do NOT await — some wallets hang on unsupported methods
+      // Fire-and-forget: do NOT await â€” some wallets hang on unsupported methods
       activeProviderRef.current.request({
         method: 'wallet_revokePermissions',
         params: [{ eth_accounts: {} }],
@@ -250,12 +250,12 @@ function App() {
     setLoading('connect')
     try {
       // ---- Force the wallet to forget this site so it MUST show the account picker ----
-      // Method 1: disconnect() — non-standard but supported by OKX, Phantom, etc.
+      // Method 1: disconnect() â€” non-standard but supported by OKX, Phantom, etc.
       try {
         const p = wallet.provider as unknown as { disconnect?: () => void | Promise<void> }
         if (typeof p.disconnect === 'function') await p.disconnect()
       } catch { /* ignore */ }
-      // Method 2: wallet_revokePermissions — EIP standard, supported by MetaMask, some others
+      // Method 2: wallet_revokePermissions â€” EIP standard, supported by MetaMask, some others
       try {
         await wallet.provider.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] })
       } catch { /* ignore */ }
@@ -474,7 +474,7 @@ function App() {
 
   useEffect(() => { loadComplianceData() }, [loadComplianceData])
 
-  // global provider event listeners removed — handled per-wallet in connectWallet
+  // global provider event listeners removed â€” handled per-wallet in connectWallet
 
   // Employer: Deposit
   const handleDeposit = async () => {
@@ -586,7 +586,7 @@ function App() {
         setMySalary(value)
         showToast('Your salary: ' + value.toString() + ' units', 'success')
       } else {
-        showToast('FHE SDK not ready — connect on Sepolia to decrypt', 'error')
+        showToast('FHE SDK not ready â€” connect on Sepolia to decrypt', 'error')
       }
     } catch (err: unknown) {
       showToast((err instanceof Error ? err.message : 'Decryption failed').slice(0, 120), 'error')
@@ -606,7 +606,7 @@ function App() {
         setMyBalance(value)
         showToast('Your balance: ' + value.toString() + ' units', 'success')
       } else {
-        showToast('FHE SDK not ready — connect on Sepolia to decrypt', 'error')
+        showToast('FHE SDK not ready â€” connect on Sepolia to decrypt', 'error')
       }
     } catch (err: unknown) {
       showToast((err instanceof Error ? err.message : 'Decryption failed').slice(0, 120), 'error')
@@ -748,7 +748,7 @@ function App() {
     try {
       const tx = await govContract.finalizeProposal(proposalId)
       await tx.wait()
-      showToast('Proposal finalized — results now public', 'success')
+      showToast('Proposal finalized â€” results now public', 'success')
       await loadGovData()
     } catch (err: unknown) {
       showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
@@ -880,7 +880,7 @@ function App() {
       const encHandle = await contract.viewSolvencyResult()
       const handleHex = ethers.hexlify(encHandle)
       const signer = await provider.getSigner()
-      // Use userDecrypt for ebool — treated as euint8 where 1=true, 0=false
+      // Use userDecrypt for ebool â€” treated as euint8 where 1=true, 0=false
       const { publicKey, privateKey } = fhevmRef.current.generateKeypair()
       const startTimestamp = Math.floor(Date.now() / 1000)
       const eip712 = fhevmRef.current.createEIP712(publicKey, [contractAddress], startTimestamp, 1)
@@ -895,7 +895,7 @@ function App() {
         [contractAddress], await signer.getAddress(), startTimestamp, 1,
       )
       const val = results[handleHex as `0x${string}`]
-      showToast(val ? '✅ Company is SOLVENT' : '❌ Company is INSOLVENT', val ? 'success' : 'error')
+      showToast(val ? 'âś… Company is SOLVENT' : 'âťŚ Company is INSOLVENT', val ? 'success' : 'error')
     } catch (err: unknown) {
       showToast((err instanceof Error ? err.message : 'Decrypt failed').slice(0, 120), 'error')
     } finally { setLoading(null) }
@@ -949,7 +949,7 @@ function App() {
     setLoading('decryptMinWage')
     try {
       const result = await decryptBooleanHandle(contract.viewMinWageResult(minWageCheckAddr))
-      showToast(result ? '✅ Employee meets minimum wage' : '❌ Employee is below minimum wage', result ? 'success' : 'error')
+      showToast(result ? 'âś… Employee meets minimum wage' : 'âťŚ Employee is below minimum wage', result ? 'success' : 'error')
     } catch (err: unknown) {
       showToast((err instanceof Error ? err.message : 'Decrypt failed').slice(0, 120), 'error')
     } finally { setLoading(null) }
@@ -960,7 +960,7 @@ function App() {
     setLoading('decryptAllMinWage')
     try {
       const result = await decryptBooleanHandle(contract.viewAllMinWageResult())
-      showToast(result ? '✅ All employees meet minimum wage' : '❌ At least one employee is below minimum wage', result ? 'success' : 'error')
+      showToast(result ? 'âś… All employees meet minimum wage' : 'âťŚ At least one employee is below minimum wage', result ? 'success' : 'error')
     } catch (err: unknown) {
       showToast((err instanceof Error ? err.message : 'Decrypt failed').slice(0, 120), 'error')
     } finally { setLoading(null) }
@@ -1027,7 +1027,7 @@ function App() {
     </div>
   )
 
-  // Setup Screen — rendered as a function call (not a component) to avoid unmount on re-render
+  // Setup Screen â€” rendered as a function call (not a component) to avoid unmount on re-render
   const renderSetupScreen = () => (
     <div className="card" style={{ maxWidth: '520px', margin: '2rem auto' }}>
       {setupMode === 'choose' && (
@@ -1039,11 +1039,11 @@ function App() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <button className="btn btn-primary" style={{ padding: '1.2rem', fontSize: '1rem', borderRadius: '12px' }}
               onClick={() => setSetupMode('deploy')}>
-              🏢 I am an Employer — Create New Payroll
+              đźŹ˘ I am an Employer â€” Create New Payroll
             </button>
             <button className="btn btn-outline" style={{ padding: '1.2rem', fontSize: '1rem', borderRadius: '12px' }}
               onClick={() => setSetupMode('existing')}>
-              👤 I am an Employee — Enter Contract Address
+              đź‘¤ I am an Employee â€” Enter Contract Address
             </button>
           </div>
         </>
@@ -1054,7 +1054,7 @@ function App() {
           <button className="btn btn-outline" style={{ marginBottom: '1rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }} onClick={() => setSetupMode('choose')}>
             Back
           </button>
-          <h2 style={{ marginBottom: '0.5rem' }}>🏢 Create New Payroll Contract</h2>
+          <h2 style={{ marginBottom: '0.5rem' }}>đźŹ˘ Create New Payroll Contract</h2>
           <p style={{ color: 'var(--text-dim)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
             You will be the Employer. After deploying, share the contract address with your employees.
           </p>
@@ -1071,7 +1071,7 @@ function App() {
           <button className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}
             onClick={handleDeployNewPayroll}
             disabled={loading === 'deploy' || !deployCompanyName.trim()}>
-            {loading === 'deploy' ? <><span className="loading"></span>Deploying...</> : '🚀 Deploy Contract'}
+            {loading === 'deploy' ? <><span className="loading"></span>Deploying...</> : 'đźš€ Deploy Contract'}
           </button>
           <p style={{ color: 'var(--text-dim)', fontSize: '0.8rem', marginTop: '0.75rem', textAlign: 'center' }}>
             This sends a transaction on {TARGET_NETWORK.chainName}
@@ -1084,7 +1084,7 @@ function App() {
           <button className="btn btn-outline" style={{ marginBottom: '1rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }} onClick={() => setSetupMode('choose')}>
             Back
           </button>
-          <h2 style={{ marginBottom: '0.5rem' }}>👤 Connect to Existing Payroll</h2>
+          <h2 style={{ marginBottom: '0.5rem' }}>đź‘¤ Connect to Existing Payroll</h2>
           <p style={{ color: 'var(--text-dim)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
             Ask your employer for the payroll contract address.
           </p>
@@ -1117,78 +1117,28 @@ function App() {
       <div className="app-shell">
         <header className="topbar">
           <div className="topbar-brand">CONFIDENTIAL <span>PAYROLL CONSOLE</span></div>
-          <div className="topbar-nav">
-            <span>Payroll</span>
-            <span>Governance</span>
-            <span>Compliance</span>
-            <span>Sepolia</span>
-          </div>
           <div className="topbar-meta">
-            <a className="btn btn-dark" href="https://docs.zama.org/protocol" target="_blank" rel="noreferrer">Docs ↗</a>
+            <a className="btn btn-dark" href="https://docs.zama.org/protocol" target="_blank" rel="noreferrer">Docs â†—</a>
           </div>
         </header>
 
         <section className="hero-panel landing-panel">
           <div className="hero-copy">
-            <span className="eyebrow">Enterprise payroll infrastructure with encrypted execution</span>
-            <h1 className="hero-title">Run compensation, board actions, and compliance without exposing sensitive data.</h1>
-            <p className="hero-subtitle">
-              This product uses Zama Protocol as the confidentiality layer: salary data remains encrypted, approvals remain private,
-              and compliance teams can verify policy outcomes without reading the underlying numbers.
-            </p>
+            <span className="eyebrow">Fully Homomorphic Encryption Â· Ethereum Sepolia</span>
+            <h1 className="hero-title">Payroll, governance, and compliance â€” end-to-end encrypted.</h1>
             <div className="hero-actions">
               <button className="btn btn-light" onClick={openWalletModal} disabled={loading === 'connect'}>
                 {loading === 'connect' ? <><span className="loading"></span>Connecting...</> : 'Open Console'}
               </button>
-              <a className="btn btn-dark" href="https://docs.zama.org/protocol" target="_blank" rel="noreferrer">Protocol Docs ↗</a>
+              <a className="btn btn-dark" href="https://docs.zama.org/protocol" target="_blank" rel="noreferrer">Protocol Docs â†—</a>
             </div>
             <div className="chip-row">
-              <span className="chip">FHE salaries</span>
+              <span className="chip">FHE encrypted salaries</span>
               <span className="chip">Private board votes</span>
               <span className="chip">Optional KYC gate</span>
-              <span className="chip">Built-in ZK input proofs</span>
+              <span className="chip">ZK input proofs</span>
             </div>
           </div>
-
-          <div className="hero-visual">
-            <div className="pixel-cube" aria-hidden="true">
-              {Array.from({ length: 16 }).map((_, index) => (
-                <span key={index} className={'pixel-tile' + (index % 5 === 0 ? ' pixel-tile--accent' : '')}></span>
-              ))}
-            </div>
-            <div className="signal-stack">
-              <div className="signal-card">
-                <span className="signal-label">Host chain</span>
-                <strong>Ethereum Sepolia</strong>
-              </div>
-              <div className="signal-card">
-                <span className="signal-label">Relayer</span>
-                <strong>{TESTNET_RUNTIME.relayerUrl.replace('https://', '')}</strong>
-              </div>
-              <div className="signal-card">
-                <span className="signal-label">Gateway chain</span>
-                <strong>{TESTNET_RUNTIME.gatewayChainId}</strong>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="summary-grid summary-grid--landing">
-          <article className="summary-card">
-            <span className="summary-label">Why Zama</span>
-            <strong className="summary-value">Compute on encrypted payroll data</strong>
-            <p>Traditional public chains force salary and balance data into the open. Zama keeps it encrypted while contracts still execute rules.</p>
-          </article>
-          <article className="summary-card">
-            <span className="summary-label">What is already ZK-backed</span>
-            <strong className="summary-value">Encrypted input proofs</strong>
-            <p>On Sepolia, every encrypted deposit, salary update, and vote goes through Zama’s input proof flow rather than blind trust.</p>
-          </article>
-          <article className="summary-card">
-            <span className="summary-label">Regulated mode</span>
-            <strong className="summary-value">Optional KYC + attestation gate</strong>
-            <p>Employers can switch between open payroll mode and a stricter compliance mode that gates employer and employee actions.</p>
-          </article>
         </section>
 
         {showWalletModal && <WalletModal />}
@@ -1202,11 +1152,6 @@ function App() {
       <div className="app-shell">
         <header className="topbar">
           <div className="topbar-brand">CONFIDENTIAL <span>PAYROLL CONSOLE</span></div>
-          <div className="topbar-nav">
-            <span>Deploy</span>
-            <span>Invite</span>
-            <span>Operate</span>
-          </div>
           <div className="topbar-meta">
             <span className="topbar-account">{shortAddr(account)}</span>
             <button className="btn btn-ghost" onClick={handleDisconnect}>Switch Wallet</button>
@@ -1239,12 +1184,6 @@ function App() {
     <div className="app-shell">
       <header className="topbar">
         <div className="topbar-brand">CONFIDENTIAL <span>PAYROLL CONSOLE</span></div>
-        <div className="topbar-nav">
-          <span>Payroll</span>
-          <span>Governance</span>
-          <span>Compliance</span>
-          <span>Runtime</span>
-        </div>
         <div className="topbar-meta">
           <span className="topbar-account">{shortAddr(account)}</span>
           <button className="btn btn-ghost" onClick={handleClearContract}>Change Contract</button>
@@ -1254,11 +1193,8 @@ function App() {
 
       <section className="hero-panel hero-panel--dashboard">
         <div className="hero-copy">
-          <span className="eyebrow">Confidential Payroll Console</span>
-          <h1 className="hero-title">{companyName || 'Enterprise payroll operations'}</h1>
-          <p className="hero-subtitle">
-            Encrypted salary execution, role-based decryption, and optional regulated access controls over Zama’s Sepolia runtime.
-          </p>
+          <span className="eyebrow">{networkName || TARGET_NETWORK.chainName} · {fhevmRef.current ? 'FHE live' : 'Sepolia only for FHE'}</span>
+          <h1 className="hero-title">{companyName || 'Payroll Console'}</h1>
           <div className="chip-row">
             {isEmployer && <span className="chip">Employer</span>}
             {isEmployee && <span className="chip">Employee</span>}
@@ -1267,27 +1203,9 @@ function App() {
             {isAuditor && <span className="chip">Auditor</span>}
             {isTaxAuthority && <span className="chip">Tax Authority</span>}
             {advancedComplianceSupported && (compliancePolicy.employerKyc || compliancePolicy.employeeKyc || compliancePolicy.employerZk || compliancePolicy.employeeZk) && (
-              <span className="chip">Regulated Mode Active</span>
+              <span className="chip">Regulated Mode</span>
             )}
           </div>
-        </div>
-
-        <div className="summary-grid">
-          <article className="summary-card">
-            <span className="summary-label">Connected runtime</span>
-            <strong className="summary-value">{networkName || TARGET_NETWORK.chainName}</strong>
-            <p>{fhevmRef.current ? 'Live encrypted input and decrypt flow ready' : 'Wallet connected; live FHE available on Sepolia only'}</p>
-          </article>
-          <article className="summary-card">
-            <span className="summary-label">Contract</span>
-            <strong className="summary-value">{shortAddr(contractAddress)}</strong>
-            <p>Payroll cycle #{cycleCount} across {employees.length} registered employees.</p>
-          </article>
-          <article className="summary-card">
-            <span className="summary-label">Relayer</span>
-            <strong className="summary-value">{TESTNET_RUNTIME.relayerUrl.replace('https://', '')}</strong>
-            <p>Gateway chain {TESTNET_RUNTIME.gatewayChainId} · ACL {shortAddr(TESTNET_RUNTIME.aclContractAddress)}</p>
-          </article>
         </div>
       </section>
 
@@ -1304,7 +1222,7 @@ function App() {
           <strong>KYC policy</strong>
           <span>
             {advancedComplianceSupported
-              ? `${compliancePolicy.employerKyc || compliancePolicy.employeeKyc ? 'KYC gated' : 'KYC optional'} · ${compliancePolicy.employerZk || compliancePolicy.employeeZk ? 'Attestation gated' : 'Attestation optional'}`
+              ? `${compliancePolicy.employerKyc || compliancePolicy.employeeKyc ? 'KYC gated' : 'KYC optional'} Â· ${compliancePolicy.employerZk || compliancePolicy.employeeZk ? 'Attestation gated' : 'Attestation optional'}`
               : 'Legacy contract / no advanced policy'}
           </span>
         </div>
@@ -1315,7 +1233,7 @@ function App() {
         {(['payroll', 'governance', 'compliance'] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             className={'tab-button' + (activeTab === tab ? ' tab-button--active' : '')}>
-            {tab === 'payroll' ? '💰 Payroll' : tab === 'governance' ? '🗳️ Governance' : '📋 Compliance'}
+            {tab === 'payroll' ? 'đź’° Payroll' : tab === 'governance' ? 'đź—łď¸Ź Governance' : 'đź“‹ Compliance'}
           </button>
         ))}
       </div>
@@ -1327,10 +1245,10 @@ function App() {
       {isEmployer && (
         <>
           <div className="card">
-            <h2>💰 Treasury</h2>
+            <h2>đź’° Treasury</h2>
             <div className="info-row">
               <span className="info-label">Treasury Balance</span>
-              <span className="encrypted-value">🔒 Encrypted</span>
+              <span className="encrypted-value">đź”’ Encrypted</span>
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
               <input type="number" placeholder="Amount to deposit" value={depositAmount}
@@ -1343,13 +1261,13 @@ function App() {
           </div>
 
           <div className="card">
-            <h2>👤 Add Employee</h2>
+            <h2>đź‘¤ Add Employee</h2>
             <div className="input-group">
               <label>Employee Wallet Address</label>
               <input type="text" placeholder="0x..." value={newEmpAddress} onChange={e => setNewEmpAddress(e.target.value)} />
             </div>
             <div className="input-group">
-              <label>Monthly Salary (encrypted on-chain — only the employee can decrypt)</label>
+              <label>Monthly Salary (encrypted on-chain â€” only the employee can decrypt)</label>
               <input type="number" placeholder="5000" value={newEmpSalary} onChange={e => setNewEmpSalary(e.target.value)} />
             </div>
             <button className="btn btn-primary" onClick={handleAddEmployee} disabled={loading === 'addEmployee'}>
@@ -1358,9 +1276,9 @@ function App() {
           </div>
 
           <div className="card">
-            <h2>📋 Employee List</h2>
+            <h2>đź“‹ Employee List</h2>
             {employees.length === 0 ? (
-              <p style={{ color: 'var(--text-dim)', textAlign: 'center', padding: '1rem' }}>No employees yet — add one above</p>
+              <p style={{ color: 'var(--text-dim)', textAlign: 'center', padding: '1rem' }}>No employees yet â€” add one above</p>
             ) : (
               <table>
                 <thead><tr><th>Address</th><th>Salary</th><th>Status</th><th>Actions</th></tr></thead>
@@ -1368,7 +1286,7 @@ function App() {
                   {employees.map(emp => (
                     <tr key={emp}>
                       <td title={emp}>{shortAddr(emp)}</td>
-                      <td><span className="encrypted-value">🔒 Encrypted</span></td>
+                      <td><span className="encrypted-value">đź”’ Encrypted</span></td>
                       <td>
                         <span className={'status-dot ' + (paidStatus[emp] ? 'paid' : 'unpaid')}></span>
                         {paidStatus[emp] ? 'Paid' : 'Unpaid'}
@@ -1384,17 +1302,17 @@ function App() {
             )}
             <div className="actions">
               <button className="btn btn-success" onClick={handleExecutePay} disabled={loading === 'pay' || employees.length === 0}>
-                {loading === 'pay' ? <><span className="loading"></span>Processing...</> : '💸 Execute Payroll'}
+                {loading === 'pay' ? <><span className="loading"></span>Processing...</> : 'đź’¸ Execute Payroll'}
               </button>
               <button className="btn btn-outline" onClick={handleResetCycle} disabled={loading === 'reset'}>
-                🔄 Reset Cycle
+                đź”„ Reset Cycle
               </button>
             </div>
           </div>
 
           {/* Share with employees */}
           <div className="card" style={{ borderColor: 'var(--accent)' }}>
-            <h2>📋 Share with Employees</h2>
+            <h2>đź“‹ Share with Employees</h2>
             <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
               Send this contract address to your employees. They paste it on the setup screen after connecting their wallet.
             </p>
@@ -1414,37 +1332,37 @@ function App() {
       {/* Employee Dashboard */}
       {isEmployee && (
         <div className="card">
-          <h2>🧑‍💼 My Payroll</h2>
+          <h2>đź§‘â€Ťđź’Ľ My Payroll</h2>
           <div className="info-row">
             <span className="info-label">My Salary</span>
             {mySalary !== null
               ? <span className="info-value">{mySalary.toString()} <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>units</span></span>
-              : <span className="encrypted-value">🔒 Click below to decrypt</span>}
+              : <span className="encrypted-value">đź”’ Click below to decrypt</span>}
           </div>
           <div className="info-row">
             <span className="info-label">My Balance</span>
             {myBalance !== null
               ? <span className="info-value">{myBalance.toString()} <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>units</span></span>
-              : <span className="encrypted-value">🔒 Click below to decrypt</span>}
+              : <span className="encrypted-value">đź”’ Click below to decrypt</span>}
           </div>
           <div className="info-row">
             <span className="info-label">This Cycle</span>
-            <span>{paidStatus[account] ? '✅ Paid' : '⏳ Pending'}</span>
+            <span>{paidStatus[account] ? 'âś… Paid' : 'âŹł Pending'}</span>
           </div>
           {!fhevmRef.current && (
             <p style={{ color: 'var(--warning)', fontSize: '0.8rem', marginTop: '0.5rem' }}>
-              FHE SDK not ready — connect on Sepolia to decrypt values
+              FHE SDK not ready â€” connect on Sepolia to decrypt values
             </p>
           )}
           <div className="actions">
             <button className="btn btn-primary" onClick={handleViewSalary} disabled={loading === 'viewSalary'}>
-              {loading === 'viewSalary' ? <><span className="loading"></span>Decrypting...</> : '🔓 Decrypt Salary'}
+              {loading === 'viewSalary' ? <><span className="loading"></span>Decrypting...</> : 'đź”“ Decrypt Salary'}
             </button>
             <button className="btn btn-outline" onClick={handleViewBalance} disabled={loading === 'viewBalance'}>
-              {loading === 'viewBalance' ? <><span className="loading"></span>Decrypting...</> : '💰 Decrypt Balance'}
+              {loading === 'viewBalance' ? <><span className="loading"></span>Decrypting...</> : 'đź’° Decrypt Balance'}
             </button>
             <button className="btn btn-success" onClick={handleWithdraw} disabled={loading === 'withdraw'}>
-              {loading === 'withdraw' ? <><span className="loading"></span>Processing...</> : '📤 Withdraw'}
+              {loading === 'withdraw' ? <><span className="loading"></span>Processing...</> : 'đź“¤ Withdraw'}
             </button>
           </div>
         </div>
@@ -1453,7 +1371,7 @@ function App() {
       {/* Access Restricted */}
       {!isEmployer && !isEmployee && (
         <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
-          <div className="lock-icon">🔒</div>
+          <div className="lock-icon">đź”’</div>
           <h2 style={{ justifyContent: 'center' }}>Access Restricted</h2>
           <p style={{ color: 'var(--text-dim)', marginBottom: '1rem' }}>
             Your address ({shortAddr(account)}) is not the employer or an employee of this contract.
@@ -1466,7 +1384,7 @@ function App() {
               Use a Different Contract
             </button>
             <button className="btn btn-primary" onClick={() => { localStorage.removeItem(LS_CONTRACT_KEY); setContractAddress(''); setContract(null); setIsEmployer(false); setIsEmployee(false); setCompanyName(''); setEmployees([]); setExistingAddrInput(''); setDeployCompanyName(''); setSetupMode('deploy'); setShowSetup(true); }}>
-              🏢 Deploy My Own Payroll
+              đźŹ˘ Deploy My Own Payroll
             </button>
           </div>
         </div>
@@ -1478,7 +1396,7 @@ function App() {
       {activeTab === 'governance' && <>
         {!govContractAddress ? (
           <div className="card" style={{ maxWidth: '520px', margin: '2rem auto' }}>
-            <h2>🗳️ Board Governance</h2>
+            <h2>đź—łď¸Ź Board Governance</h2>
             <p style={{ color: 'var(--text-dim)', marginBottom: '1.5rem' }}>Deploy a new governance contract or connect to an existing one.</p>
             <div className="input-group">
               <label>Organization Name</label>
@@ -1486,7 +1404,7 @@ function App() {
             </div>
             <button className="btn btn-primary" style={{ width: '100%', marginBottom: '1rem' }}
               onClick={handleDeployGov} disabled={loading === 'deployGov' || !deployGovOrgName.trim()}>
-              {loading === 'deployGov' ? <><span className="loading"></span>Deploying...</> : '🚀 Deploy Governance Contract'}
+              {loading === 'deployGov' ? <><span className="loading"></span>Deploying...</> : 'đźš€ Deploy Governance Contract'}
             </button>
             <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '1rem 0' }} />
             <div className="input-group">
@@ -1499,7 +1417,7 @@ function App() {
           <>
             <div className="card" style={{ borderColor: 'var(--accent)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h2>🗳️ {govOrgName || 'Governance'}</h2>
+                <h2>đź—łď¸Ź {govOrgName || 'Governance'}</h2>
                 <button className="btn btn-outline" style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }} onClick={handleClearGov}>Change Contract</button>
               </div>
               <div className="info-row">
@@ -1519,7 +1437,7 @@ function App() {
             {/* Admin: manage board */}
             {isAdmin && (
               <div className="card">
-                <h2>👥 Board Management</h2>
+                <h2>đź‘Ą Board Management</h2>
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
                   <input type="text" placeholder="Board member address 0x..." value={newMemberAddr}
                     onChange={e => setNewMemberAddr(e.target.value)}
@@ -1548,7 +1466,7 @@ function App() {
             {/* Admin: create proposal */}
             {isAdmin && (
               <div className="card">
-                <h2>📝 Create Proposal</h2>
+                <h2>đź“ť Create Proposal</h2>
                 <div className="input-group">
                   <label>Title</label>
                   <input type="text" placeholder="e.g. Increase Q2 Budget" value={proposalTitle} onChange={e => setProposalTitle(e.target.value)} />
@@ -1569,7 +1487,7 @@ function App() {
 
             {/* Proposals list */}
             <div className="card">
-              <h2>📋 Proposals ({proposals.length})</h2>
+              <h2>đź“‹ Proposals ({proposals.length})</h2>
               {proposals.length === 0 ? (
                 <p style={{ color: 'var(--text-dim)', textAlign: 'center', padding: '1rem' }}>No proposals yet</p>
               ) : proposals.map(p => {
@@ -1588,7 +1506,7 @@ function App() {
                     <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>{p.description}</p>
                     <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '0.75rem' }}>
                       <span>Voters: {p.voterCount}</span>
-                      <span>·</span>
+                      <span>Â·</span>
                       <span>Ends: {new Date(p.endTime * 1000).toLocaleString()}</span>
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -1596,24 +1514,24 @@ function App() {
                         <>
                           <button className="btn btn-success" style={{ fontSize: '0.85rem', padding: '0.4rem 1rem' }}
                             onClick={() => handleVote(p.id, true)} disabled={loading === 'vote-' + p.id}>
-                            {loading === 'vote-' + p.id ? <span className="loading"></span> : '👍 Vote YES'}
+                            {loading === 'vote-' + p.id ? <span className="loading"></span> : 'đź‘Ť Vote YES'}
                           </button>
                           <button className="btn btn-danger" style={{ fontSize: '0.85rem', padding: '0.4rem 1rem' }}
                             onClick={() => handleVote(p.id, false)} disabled={loading === 'vote-' + p.id}>
-                            {loading === 'vote-' + p.id ? <span className="loading"></span> : '👎 Vote NO'}
+                            {loading === 'vote-' + p.id ? <span className="loading"></span> : 'đź‘Ž Vote NO'}
                           </button>
                         </>
                       )}
                       {isEnded && !p.isFinalized && isAdmin && (
                         <button className="btn btn-primary" style={{ fontSize: '0.85rem', padding: '0.4rem 1rem' }}
                           onClick={() => handleFinalize(p.id)} disabled={loading === 'finalize-' + p.id}>
-                          {loading === 'finalize-' + p.id ? <span className="loading"></span> : '🔓 Finalize'}
+                          {loading === 'finalize-' + p.id ? <span className="loading"></span> : 'đź”“ Finalize'}
                         </button>
                       )}
                       {(p.isFinalized || isAdmin) && (
                         <button className="btn btn-outline" style={{ fontSize: '0.85rem', padding: '0.4rem 1rem' }}
                           onClick={() => handleDecryptVoteCounts(p.id)} disabled={loading === 'decrypt-' + p.id}>
-                          {loading === 'decrypt-' + p.id ? <span className="loading"></span> : '🔓 Decrypt Results'}
+                          {loading === 'decrypt-' + p.id ? <span className="loading"></span> : 'đź”“ Decrypt Results'}
                         </button>
                       )}
                     </div>
@@ -1624,7 +1542,7 @@ function App() {
 
             {/* Share governance contract */}
             <div className="card" style={{ borderColor: 'var(--accent)' }}>
-              <h2>📋 Share with Board Members</h2>
+              <h2>đź“‹ Share with Board Members</h2>
               <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
                 Share this governance contract address with board members.
               </p>
@@ -1646,7 +1564,7 @@ function App() {
       {activeTab === 'compliance' && <>
         {!contractAddress ? (
           <div className="card" style={{ textAlign: 'center', padding: '2rem' }}>
-            <p style={{ color: 'var(--text-dim)' }}>Connect to a payroll contract first (Payroll tab → Setup)</p>
+            <p style={{ color: 'var(--text-dim)' }}>Connect to a payroll contract first (Payroll tab â†’ Setup)</p>
           </div>
         ) : (
           <>
@@ -1654,7 +1572,7 @@ function App() {
             {isEmployer && (
               <>
               <div className="card card-highlight">
-                <h2>🛡️ Compliance Policy</h2>
+                <h2>đź›ˇď¸Ź Compliance Policy</h2>
                 <p className="card-copy">
                   Zama already secures encrypted payroll inputs with input proofs on Sepolia. The policy below adds an optional business layer:
                   KYC approval and ZK/KYC attestation commitments for employer and employee actions.
@@ -1712,7 +1630,7 @@ function App() {
               </div>
 
               <div className="card">
-                <h2>🪪 KYC / Attestation Registry</h2>
+                <h2>đźŞŞ KYC / Attestation Registry</h2>
                 <p className="card-copy">
                   Store only commitments onchain. You can paste a bytes32 digest directly, or enter a plain reference string and the UI will hash it before submission.
                 </p>
@@ -1743,7 +1661,7 @@ function App() {
               </div>
 
               <div className="card">
-                <h2>🔑 Role Management</h2>
+                <h2>đź”‘ Role Management</h2>
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
                   <input type="text" placeholder="Auditor address 0x..." value={auditorAddr}
                     onChange={e => setAuditorAddr(e.target.value)}
@@ -1793,19 +1711,19 @@ function App() {
             {/* Auditor Panel */}
             {isAuditor && (
               <div className="card">
-                <h2>🔍 Auditor Panel</h2>
+                <h2>đź”Ť Auditor Panel</h2>
                 <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '1rem' }}>
                   As an auditor, you can view encrypted aggregates and check solvency without seeing individual salaries.
                 </p>
                 <div className="actions">
                   <button className="btn btn-primary" onClick={handleDecryptTotalExpense} disabled={loading === 'decryptExpense'}>
-                    {loading === 'decryptExpense' ? <><span className="loading"></span>Decrypting...</> : '💰 Decrypt Total Expense'}
+                    {loading === 'decryptExpense' ? <><span className="loading"></span>Decrypting...</> : 'đź’° Decrypt Total Expense'}
                   </button>
                   <button className="btn btn-outline" onClick={handleSolvencyCheck} disabled={loading === 'solvency'}>
-                    {loading === 'solvency' ? <><span className="loading"></span>Checking...</> : '🏦 Run Solvency Check'}
+                    {loading === 'solvency' ? <><span className="loading"></span>Checking...</> : 'đźŹ¦ Run Solvency Check'}
                   </button>
                   <button className="btn btn-success" onClick={handleDecryptSolvency} disabled={loading === 'decryptSolvency'}>
-                    {loading === 'decryptSolvency' ? <><span className="loading"></span>Decrypting...</> : '🔓 Decrypt Solvency'}
+                    {loading === 'decryptSolvency' ? <><span className="loading"></span>Decrypting...</> : 'đź”“ Decrypt Solvency'}
                   </button>
                 </div>
               </div>
@@ -1814,19 +1732,19 @@ function App() {
             {/* Tax Authority Panel */}
             {isTaxAuthority && (
               <div className="card">
-                <h2>🏛️ Tax Authority Panel</h2>
+                <h2>đźŹ›ď¸Ź Tax Authority Panel</h2>
                 <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '1rem' }}>
-                  Verify minimum wage compliance and view aggregate payroll data — no individual salaries exposed.
+                  Verify minimum wage compliance and view aggregate payroll data â€” no individual salaries exposed.
                 </p>
                 <div className="actions" style={{ marginBottom: '1rem' }}>
                   <button className="btn btn-primary" onClick={handleDecryptTotalExpense} disabled={loading === 'decryptExpense'}>
-                    {loading === 'decryptExpense' ? <><span className="loading"></span>Decrypting...</> : '💰 Decrypt Total Expense'}
+                    {loading === 'decryptExpense' ? <><span className="loading"></span>Decrypting...</> : 'đź’° Decrypt Total Expense'}
                   </button>
                   <button className="btn btn-outline" onClick={() => handleVerifyMinWage()} disabled={loading === 'verifyMinWage'}>
-                    {loading === 'verifyMinWage' ? <><span className="loading"></span>Checking...</> : '✅ Verify All Min Wage'}
+                    {loading === 'verifyMinWage' ? <><span className="loading"></span>Checking...</> : 'âś… Verify All Min Wage'}
                   </button>
                   <button className="btn btn-success" onClick={handleDecryptAllMinWage} disabled={loading === 'decryptAllMinWage'}>
-                    {loading === 'decryptAllMinWage' ? <><span className="loading"></span>Decrypting...</> : '🔓 Decrypt Batch Result'}
+                    {loading === 'decryptAllMinWage' ? <><span className="loading"></span>Decrypting...</> : 'đź”“ Decrypt Batch Result'}
                   </button>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -1846,7 +1764,7 @@ function App() {
             {/* No compliance role */}
             {!isEmployer && !isAuditor && !isTaxAuthority && (
               <div className="card" style={{ textAlign: 'center', padding: '2rem' }}>
-                <div className="lock-icon">🔒</div>
+                <div className="lock-icon">đź”’</div>
                 <h2 style={{ justifyContent: 'center' }}>No Compliance Access</h2>
                 <p style={{ color: 'var(--text-dim)' }}>
                   Your address is not registered as an employer, auditor, or tax authority for this contract.

@@ -86,14 +86,6 @@ a {
   color: var(--accent);
 }
 
-.topbar-nav {
-  display: flex;
-  align-items: center;
-  gap: 22px;
-  font-size: 0.95rem;
-  color: var(--ink-soft);
-}
-
 .topbar-meta {
   display: flex;
   align-items: center;
@@ -110,11 +102,8 @@ a {
 
 .hero-panel {
   margin-top: 24px;
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.9fr);
-  gap: 24px;
-  padding: 44px;
-  min-height: 360px;
+  padding: 56px 44px;
+  min-height: 280px;
   border: 1.5px solid var(--line-strong);
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(243, 234, 219, 0.96));
@@ -167,75 +156,16 @@ a {
   max-width: 10.5ch;
 }
 
-.hero-subtitle {
-  max-width: 58ch;
-  font-size: 1.02rem;
-  color: var(--ink-soft);
-}
-
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
 }
 
-.hero-visual {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
-}
-
-.pixel-cube {
-  width: 220px;
-  height: 220px;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
-  padding: 10px;
-  background: linear-gradient(180deg, rgba(32, 37, 46, 0.95), rgba(24, 27, 35, 0.98));
-  box-shadow: 22px 22px 0 rgba(25, 25, 25, 0.1);
-}
-
-.pixel-tile {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(233, 224, 209, 0.9));
-}
-
-.pixel-tile--accent {
-  background: linear-gradient(135deg, rgba(194, 146, 54, 0.98), rgba(255, 255, 255, 0.92));
-}
-
-.signal-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.signal-card {
-  min-width: 220px;
-  padding: 14px 16px;
-  border: 1.5px solid var(--line-strong);
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 10px 10px 0 rgba(25, 25, 25, 0.06);
-}
-
-.signal-label {
-  display: block;
-  font-size: 0.74rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--ink-soft);
-  margin-bottom: 0.35rem;
-}
-
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
-}
-
-.summary-grid--landing {
-  margin-top: 24px;
 }
 
 .summary-grid--mini {
@@ -646,10 +576,6 @@ th {
     padding: 16px;
   }
 
-  .topbar-nav {
-    display: none;
-  }
-
   .topbar-meta {
     width: 100%;
     justify-content: flex-start;
@@ -658,15 +584,6 @@ th {
 
   .hero-panel {
     padding: 24px;
-  }
-
-  .hero-visual {
-    flex-direction: column;
-  }
-
-  .pixel-cube {
-    width: 180px;
-    height: 180px;
   }
 
   .summary-grid,
