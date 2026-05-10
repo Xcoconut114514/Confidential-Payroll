@@ -18,7 +18,7 @@ const ZAMA_NETWORK = {
   chainId: '0xaa36a7',
   chainName: 'Ethereum Sepolia (Zama fhEVM)',
   nativeCurrency: { name: 'Sepolia ETH', symbol: 'ETH', decimals: 18 },
-  rpcUrls: ['https://rpc.sepolia.org'],
+  rpcUrls: ['https://ethereum-sepolia-rpc.publicnode.com'],
   blockExplorerUrls: ['https://sepolia.etherscan.io'],
 }
 
@@ -1116,12 +1116,12 @@ function App() {
     return (
       <div className="app-shell">
         <header className="topbar">
-          <div className="topbar-brand">ZAMA <span>PAYROLL</span></div>
+          <div className="topbar-brand">CONFIDENTIAL <span>PAYROLL CONSOLE</span></div>
           <div className="topbar-nav">
-            <span>Protocol</span>
-            <span>Developer</span>
+            <span>Payroll</span>
+            <span>Governance</span>
             <span>Compliance</span>
-            <span>Enterprise</span>
+            <span>Sepolia</span>
           </div>
           <div className="topbar-meta">
             <a className="btn btn-dark" href="https://docs.zama.org/protocol" target="_blank" rel="noreferrer">Docs ↗</a>
@@ -1130,17 +1130,17 @@ function App() {
 
         <section className="hero-panel landing-panel">
           <div className="hero-copy">
-            <span className="eyebrow">Confidential payroll operations on public infrastructure</span>
-            <h1 className="hero-title">Private payroll, formal governance, and audit-ready compliance.</h1>
+            <span className="eyebrow">Enterprise payroll infrastructure with encrypted execution</span>
+            <h1 className="hero-title">Run compensation, board actions, and compliance without exposing sensitive data.</h1>
             <p className="hero-subtitle">
-              This console turns Zama FHE into an enterprise workflow: salaries stay encrypted, board votes stay private,
-              and regulated checks remain verifiable without exposing raw data.
+              This product uses Zama Protocol as the confidentiality layer: salary data remains encrypted, approvals remain private,
+              and compliance teams can verify policy outcomes without reading the underlying numbers.
             </p>
             <div className="hero-actions">
               <button className="btn btn-light" onClick={openWalletModal} disabled={loading === 'connect'}>
-                {loading === 'connect' ? <><span className="loading"></span>Connecting...</> : 'Join Payroll Console'}
+                {loading === 'connect' ? <><span className="loading"></span>Connecting...</> : 'Open Console'}
               </button>
-              <a className="btn btn-dark" href="https://docs.zama.org/protocol" target="_blank" rel="noreferrer">Zama Docs ↗</a>
+              <a className="btn btn-dark" href="https://docs.zama.org/protocol" target="_blank" rel="noreferrer">Protocol Docs ↗</a>
             </div>
             <div className="chip-row">
               <span className="chip">FHE salaries</span>
@@ -1201,7 +1201,7 @@ function App() {
     return (
       <div className="app-shell">
         <header className="topbar">
-          <div className="topbar-brand">ZAMA <span>PAYROLL</span></div>
+          <div className="topbar-brand">CONFIDENTIAL <span>PAYROLL CONSOLE</span></div>
           <div className="topbar-nav">
             <span>Deploy</span>
             <span>Invite</span>
@@ -1238,7 +1238,7 @@ function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="topbar-brand">ZAMA <span>PAYROLL</span></div>
+        <div className="topbar-brand">CONFIDENTIAL <span>PAYROLL CONSOLE</span></div>
         <div className="topbar-nav">
           <span>Payroll</span>
           <span>Governance</span>

@@ -1,23 +1,23 @@
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;700&display=swap');
 
 :root {
-  --bg: #ffd217;
-  --bg-soft: #fff0a6;
-  --surface: rgba(255, 251, 235, 0.92);
-  --surface-strong: rgba(255, 255, 255, 0.96);
-  --surface-muted: rgba(255, 239, 167, 0.9);
-  --ink: #111111;
-  --ink-soft: rgba(17, 17, 17, 0.72);
-  --line: rgba(17, 17, 17, 0.16);
-  --line-strong: rgba(17, 17, 17, 0.94);
-  --success: #0f8f53;
-  --danger: #ba2416;
-  --warning: #8d5d00;
-  --shadow: 12px 12px 0 rgba(17, 17, 17, 0.12);
+  --bg: #f3efe7;
+  --bg-soft: #f9f5ee;
+  --surface: rgba(255, 252, 247, 0.94);
+  --surface-strong: rgba(255, 255, 255, 0.98);
+  --surface-muted: rgba(242, 232, 212, 0.76);
+  --ink: #191919;
+  --ink-soft: rgba(25, 25, 25, 0.68);
+  --line: rgba(25, 25, 25, 0.13);
+  --line-strong: rgba(25, 25, 25, 0.88);
+  --success: #16724b;
+  --danger: #b43a25;
+  --warning: #9b6a12;
+  --shadow: 14px 14px 0 rgba(25, 25, 25, 0.08);
   --card: var(--surface);
   --border: var(--line);
-  --accent: var(--ink);
-  --accent-hover: #2b2b2b;
+  --accent: #ab7a1f;
+  --accent-hover: #8d6519;
   --text: var(--ink);
   --text-dim: var(--ink-soft);
 }
@@ -39,9 +39,9 @@ body {
   color: var(--ink);
   line-height: 1.6;
   background:
-    radial-gradient(circle at 12% 18%, rgba(255, 255, 255, 0.4), transparent 18%),
-    radial-gradient(circle at 80% 22%, rgba(255, 255, 255, 0.28), transparent 22%),
-    linear-gradient(180deg, #ffd52e 0%, #ffd118 38%, #ffc700 100%);
+    radial-gradient(circle at 14% 18%, rgba(182, 134, 45, 0.16), transparent 18%),
+    radial-gradient(circle at 83% 20%, rgba(28, 34, 48, 0.1), transparent 20%),
+    linear-gradient(180deg, #f6f1e7 0%, #efe5d4 52%, #ece4d8 100%);
 }
 
 button,
@@ -67,21 +67,23 @@ a {
   gap: 18px;
   padding: 16px 20px;
   border: 1.5px solid var(--line-strong);
-  background: rgba(255, 214, 51, 0.55);
+  background: rgba(255, 255, 255, 0.64);
   backdrop-filter: blur(10px);
+  box-shadow: 0 18px 48px rgba(25, 25, 25, 0.06);
 }
 
 .topbar-brand {
   display: flex;
   flex-direction: column;
   font-weight: 700;
-  font-size: 1.5rem;
-  letter-spacing: 0.08em;
+  font-size: 1.36rem;
+  letter-spacing: 0.06em;
 }
 
 .topbar-brand span {
   font-size: 0.66rem;
-  letter-spacing: 0.28em;
+  letter-spacing: 0.24em;
+  color: var(--accent);
 }
 
 .topbar-nav {
@@ -103,7 +105,7 @@ a {
   font-size: 0.78rem;
   padding: 0.55rem 0.8rem;
   border: 1.5px solid var(--line-strong);
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .hero-panel {
@@ -115,9 +117,10 @@ a {
   min-height: 360px;
   border: 1.5px solid var(--line-strong);
   background:
-    linear-gradient(135deg, rgba(255, 213, 46, 0.72), rgba(255, 246, 188, 0.76));
+    linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(243, 234, 219, 0.96));
   position: relative;
   overflow: hidden;
+  box-shadow: 0 30px 70px rgba(25, 25, 25, 0.08);
 }
 
 .hero-panel::after {
@@ -126,6 +129,17 @@ a {
   inset: auto 0 0 0;
   height: 1px;
   background: rgba(17, 17, 17, 0.18);
+}
+
+.hero-panel::before {
+  content: '';
+  position: absolute;
+  width: 360px;
+  height: 360px;
+  right: -100px;
+  top: -120px;
+  background: radial-gradient(circle, rgba(171, 122, 31, 0.18), rgba(171, 122, 31, 0));
+  pointer-events: none;
 }
 
 .hero-copy {
@@ -140,7 +154,7 @@ a {
   width: fit-content;
   padding: 0.38rem 0.72rem;
   border: 1.5px solid var(--line-strong);
-  background: rgba(255, 255, 255, 0.84);
+  background: rgba(255, 255, 255, 0.92);
   font-size: 0.78rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -179,16 +193,16 @@ a {
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   padding: 10px;
-  background: rgba(17, 17, 17, 0.94);
-  box-shadow: 18px 18px 0 rgba(17, 17, 17, 0.18);
+  background: linear-gradient(180deg, rgba(32, 37, 46, 0.95), rgba(24, 27, 35, 0.98));
+  box-shadow: 22px 22px 0 rgba(25, 25, 25, 0.1);
 }
 
 .pixel-tile {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(255, 232, 137, 0.82));
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(233, 224, 209, 0.9));
 }
 
 .pixel-tile--accent {
-  background: linear-gradient(135deg, rgba(255, 196, 58, 0.98), rgba(255, 255, 255, 0.9));
+  background: linear-gradient(135deg, rgba(194, 146, 54, 0.98), rgba(255, 255, 255, 0.92));
 }
 
 .signal-stack {
@@ -201,8 +215,8 @@ a {
   min-width: 220px;
   padding: 14px 16px;
   border: 1.5px solid var(--line-strong);
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: 8px 8px 0 rgba(17, 17, 17, 0.08);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 10px 10px 0 rgba(25, 25, 25, 0.06);
 }
 
 .signal-label {
@@ -233,7 +247,7 @@ a {
   padding: 18px;
   border: 1.5px solid var(--line-strong);
   background: var(--surface-strong);
-  box-shadow: 8px 8px 0 rgba(17, 17, 17, 0.08);
+  box-shadow: 10px 10px 0 rgba(25, 25, 25, 0.06);
 }
 
 .summary-card p {
@@ -269,7 +283,7 @@ a {
   align-items: center;
   padding: 0.42rem 0.7rem;
   border: 1.5px solid var(--line-strong);
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.88);
   font-size: 0.78rem;
   font-weight: 600;
 }
@@ -281,13 +295,13 @@ a {
   gap: 16px;
   padding: 18px;
   border: 1.5px solid var(--line-strong);
-  background: rgba(17, 17, 17, 0.94);
-  color: #fff6c7;
+  background: linear-gradient(135deg, rgba(27, 31, 39, 0.97), rgba(39, 44, 55, 0.98));
+  color: #f6f1e7;
 }
 
 .network-ribbon strong {
   display: block;
-  color: #ffd845;
+  color: #ddb36f;
   margin-bottom: 0.35rem;
   font-size: 0.74rem;
   text-transform: uppercase;
@@ -304,7 +318,7 @@ a {
 .tab-button {
   flex: 1;
   border: 1.5px solid var(--line-strong);
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.68);
   color: var(--ink);
   padding: 14px 16px;
   font-weight: 600;
@@ -317,9 +331,9 @@ a {
 }
 
 .tab-button--active {
-  background: rgba(17, 17, 17, 0.95);
-  color: #fff5c4;
-  box-shadow: 10px 10px 0 rgba(17, 17, 17, 0.12);
+  background: rgba(27, 31, 39, 0.96);
+  color: #f8f4eb;
+  box-shadow: 10px 10px 0 rgba(25, 25, 25, 0.08);
 }
 
 .card {
