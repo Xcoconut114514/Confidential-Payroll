@@ -127,7 +127,7 @@ function detectWallets(): WalletOption[] {
     { id: 'phantom', name: 'Phantom (EVM)', icon: 'PH', provider: phantom, available: !!phantom, description: 'Phantom Ethereum wallet' },
     { id: 'coinbase', name: 'Coinbase Wallet', icon: 'CB', provider: coinbase, available: !!coinbase, description: 'Coinbase self-custody wallet' },
     { id: 'brave', name: 'Brave Wallet', icon: 'BW', provider: brave, available: !!brave, description: 'Built-in Brave browser wallet' },
-    { id: 'generic', name: 'Other Wallet', icon: 'đźŚ', provider: eth ?? null, available: !!eth, description: 'Any other injected wallet' },
+    { id: 'generic', name: 'Other Wallet', icon: 'OT', provider: eth ?? null, available: !!eth, description: 'Any other injected wallet' },
   ]
 }
 
@@ -322,6 +322,31 @@ function App() {
   const fhevmRef = useRef<import('@zama-fhe/relayer-sdk/web').FhevmInstance | null>(null)
 
   const t = T[lang]
+  const tr = (en: string, zh: string) => (lang === 'zh' ? zh : en)
+  const walletDisplayName = (wallet: WalletOption) =>
+    wallet.id === 'generic' ? tr('Other Wallet', '\u5176\u4ed6\u94b1\u5305') : wallet.name
+  const walletDescription = (wallet: WalletOption) => {
+    if (!wallet.available) return tr('Not installed', '\u672a\u5b89\u88c5')
+
+    switch (wallet.id) {
+      case 'metamask':
+        return tr('Most popular EVM wallet', '\u6700\u5e38\u7528\u7684 EVM \u94b1\u5305')
+      case 'okx':
+        return tr('OKX multi-chain wallet', 'OKX \u591a\u94fe\u94b1\u5305')
+      case 'bitget':
+        return tr('Bitget Web3 wallet', 'Bitget Web3 \u94b1\u5305')
+      case 'phantom':
+        return tr('Phantom Ethereum wallet', 'Phantom Ethereum \u94b1\u5305')
+      case 'coinbase':
+        return tr('Coinbase self-custody wallet', 'Coinbase \u81ea\u6258\u7ba1\u94b1\u5305')
+      case 'brave':
+        return tr('Built-in Brave browser wallet', 'Brave \u6d4f\u89c8\u5668\u5185\u7f6e\u94b1\u5305')
+      default:
+        return tr('Any other injected wallet', '\u4efb\u610f\u5176\u4ed6\u6ce8\u5165\u5f0f\u94b1\u5305')
+    }
+  }
+  const errorText = (err: unknown, fallbackEn: string, fallbackZh: string, max = 120) =>
+    (err instanceof Error ? err.message : tr(fallbackEn, fallbackZh)).slice(0, max)
 
   // Form state
   const [newEmpAddress, setNewEmpAddress] = useState('')
@@ -374,7 +399,15 @@ function App() {
   }
 
   const connectWallet = async (wallet: WalletOption) => {
-    if (!wallet.provider) { showToast(wallet.name + ' not detected. Please install it.', 'error'); return }
+    if (!wallet.provider) {
+      showToast(
+        lang === 'zh'
+          ? `${walletDisplayName(wallet)} \u672a\u68c0\u6d4b\u5230\uff0c\u8bf7\u5148\u5b89\u88c5\u3002`
+          : wallet.name + ' not detected. Please install it.',
+        'error',
+      )
+      return
+    }
     setShowWalletModal(false)
     setLoading('connect')
     try {
@@ -394,11 +427,11 @@ function App() {
       const accounts = await wallet.provider.request({ method: 'eth_requestAccounts' }) as string[]
 
       if (!accounts || accounts.length === 0) {
-        showToast('No accounts returned from wallet', 'error')
+        showToast(tr('No accounts returned from wallet', '\u94b1\u5305\u6ca1\u6709\u8fd4\u56de\u8d26\u53f7'), 'error')
         setLoading(null)
         return
       }
-      try { await switchToTargetNetwork(wallet.provider) } catch { showToast('Could not auto-switch network', 'error') }
+      try { await switchToTargetNetwork(wallet.provider) } catch { showToast(tr('Could not auto-switch network', '\u65e0\u6cd5\u81ea\u52a8\u5207\u6362\u7f51\u7edc'), 'error') }
       const prov = new ethers.BrowserProvider(wallet.provider as ethers.Eip1193Provider)
       const network = await prov.getNetwork()
       setNetworkName(network.name === 'unknown' ? 'Chain ' + network.chainId : network.name)
@@ -416,10 +449,10 @@ function App() {
       if (Number(network.chainId) === 11155111) {
         const fhevm = await initFhevm(wallet.provider as ethers.Eip1193Provider)
         fhevmRef.current = fhevm
-        if (fhevm) showToast('Wallet + FHE SDK ready!', 'success')
-        else showToast('Wallet connected (FHE SDK not ready)', 'info')
+        if (fhevm) showToast(tr('Wallet + FHE SDK ready!', '\u94b1\u5305 + FHE SDK \u5df2\u5c31\u7eea\uff01'), 'success')
+        else showToast(tr('Wallet connected (FHE SDK not ready)', '\u94b1\u5305\u5df2\u8fde\u63a5\uff08FHE SDK \u672a\u5c31\u7eea\uff09'), 'info')
       } else {
-        showToast('Wallet connected!', 'success')
+        showToast(tr('Wallet connected!', '\u94b1\u5305\u5df2\u8fde\u63a5\uff01'), 'success')
       }
 
       // If no contract stored yet, show setup
@@ -428,34 +461,39 @@ function App() {
         setSetupMode('choose')
       }
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Connection failed').slice(0, 100), 'error')
+      showToast(errorText(err, 'Connection failed', '\u8fde\u63a5\u5931\u8d25', 100), 'error')
     } finally { setLoading(null) }
   }
 
   // Deploy a brand-new payroll contract as employer
   const handleDeployNewPayroll = async () => {
-    if (!provider || !deployCompanyName.trim()) { showToast('Enter a company name', 'error'); return }
+    if (!provider || !deployCompanyName.trim()) { showToast(tr('Enter a company name', '\u8bf7\u8f93\u5165\u516c\u53f8\u540d\u79f0'), 'error'); return }
     setLoading('deploy')
     try {
       const signer = await provider.getSigner()
       const factory = new ethers.ContractFactory(ABI, BYTECODE, signer)
-      showToast('Confirm the deployment transaction in your wallet...', 'info')
+      showToast(tr('Confirm the deployment transaction in your wallet...', '\u8bf7\u5728\u94b1\u5305\u4e2d\u786e\u8ba4\u90e8\u7f72\u4ea4\u6613...'), 'info')
       const deployed = await factory.deploy(deployCompanyName.trim())
-      showToast('Waiting for on-chain confirmation...', 'info')
+      showToast(tr('Waiting for on-chain confirmation...', '\u7b49\u5f85\u94fe\u4e0a\u786e\u8ba4\u4e2d...'), 'info')
       await deployed.waitForDeployment()
       const addr = await deployed.getAddress()
       localStorage.setItem(LS_CONTRACT_KEY, addr)
       setContractAddress(addr)
       setShowSetup(false)
-      showToast('Contract deployed! Address: ' + addr.slice(0, 10) + '...' + addr.slice(-6), 'success')
+      showToast(
+        lang === 'zh'
+          ? `\u5408\u7ea6\u5df2\u90e8\u7f72\uff01\u5730\u5740\uff1a ${addr.slice(0, 10)}...${addr.slice(-6)}`
+          : 'Contract deployed! Address: ' + addr.slice(0, 10) + '...' + addr.slice(-6),
+        'success',
+      )
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Deploy failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Deploy failed', '\u90e8\u7f72\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
   // Connect to an existing contract (for employees)
   const handleUseExisting = () => {
-    if (!ethers.isAddress(existingAddrInput)) { showToast('Invalid contract address', 'error'); return }
+    if (!ethers.isAddress(existingAddrInput)) { showToast(tr('Invalid contract address', '\u5408\u7ea6\u5730\u5740\u65e0\u6548'), 'error'); return }
     const addr = ethers.getAddress(existingAddrInput)
     localStorage.setItem(LS_CONTRACT_KEY, addr)
     setContractAddress(addr)
@@ -625,20 +663,20 @@ function App() {
       }
       const tx = await contract.deposit(handle, inputProof)
       await tx.wait()
-      showToast('Deposited ' + amount + ' to treasury', 'success')
+      showToast(lang === 'zh' ? `\u5df2\u5411\u8d44\u91d1\u6c60\u5b58\u5165 ${amount}` : 'Deposited ' + amount + ' to treasury', 'success')
       setDepositAmount('')
       await loadContractData()
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Transaction failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Transaction failed', '\u4ea4\u6613\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
   // Employer: Add Employee
   const handleAddEmployee = async () => {
     if (!contract || !provider) return
-    if (!ethers.isAddress(newEmpAddress)) { showToast('Invalid address', 'error'); return }
+    if (!ethers.isAddress(newEmpAddress)) { showToast(tr('Invalid address', '\u5730\u5740\u65e0\u6548'), 'error'); return }
     const salary = parseInt(newEmpSalary)
-    if (!salary || salary <= 0) { showToast('Enter a valid salary', 'error'); return }
+    if (!salary || salary <= 0) { showToast(tr('Enter a valid salary', '\u8bf7\u8f93\u5165\u6709\u6548\u85aa\u8d44'), 'error'); return }
     setLoading('addEmployee')
     try {
       const signer = await provider.getSigner()
@@ -654,11 +692,11 @@ function App() {
       }
       const tx = await contract.addEmployee(newEmpAddress, handle, inputProof)
       await tx.wait()
-      showToast('Employee added!', 'success')
+      showToast(tr('Employee added!', '\u5458\u5de5\u5df2\u6dfb\u52a0\uff01'), 'success')
       setNewEmpAddress(''); setNewEmpSalary('')
       await loadContractData()
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Transaction failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Transaction failed', '\u4ea4\u6613\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
@@ -668,10 +706,10 @@ function App() {
     try {
       const tx = await contract.removeEmployee(addr)
       await tx.wait()
-      showToast('Employee removed', 'success')
+      showToast(tr('Employee removed', '\u5458\u5de5\u5df2\u79fb\u9664'), 'success')
       await loadContractData()
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Transaction failed').slice(0, 100), 'error')
+      showToast(errorText(err, 'Transaction failed', '\u4ea4\u6613\u5931\u8d25', 100), 'error')
     } finally { setLoading(null) }
   }
 
@@ -681,10 +719,10 @@ function App() {
     try {
       const tx = await contract.executePay()
       await tx.wait()
-      showToast('Payroll executed!', 'success')
+      showToast(tr('Payroll executed!', '\u53d1\u85aa\u5df2\u6267\u884c\uff01'), 'success')
       await loadContractData()
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Transaction failed').slice(0, 100), 'error')
+      showToast(errorText(err, 'Transaction failed', '\u4ea4\u6613\u5931\u8d25', 100), 'error')
     } finally { setLoading(null) }
   }
 
@@ -694,10 +732,10 @@ function App() {
     try {
       const tx = await contract.resetPayCycle()
       await tx.wait()
-      showToast('Pay cycle reset', 'success')
+      showToast(tr('Pay cycle reset', '\u53d1\u85aa\u5468\u671f\u5df2\u91cd\u7f6e'), 'success')
       await loadContractData()
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Transaction failed').slice(0, 100), 'error')
+      showToast(errorText(err, 'Transaction failed', '\u4ea4\u6613\u5931\u8d25', 100), 'error')
     } finally { setLoading(null) }
   }
 
@@ -709,16 +747,16 @@ function App() {
       const encHandle = await contract.viewMySalary()
       const handleHex = ethers.hexlify(encHandle)
       if (fhevmRef.current) {
-        showToast('Please sign the decryption request in your wallet...', 'info')
+        showToast(tr('Please sign the decryption request in your wallet...', '\u8bf7\u5728\u94b1\u5305\u4e2d\u7b7e\u540d\u89e3\u5bc6\u8bf7\u6c42...'), 'info')
         const signer = await provider.getSigner()
         const value = await userDecryptHandle(fhevmRef.current, handleHex, contractAddress, signer)
         setMySalary(value)
-        showToast('Your salary: ' + value.toString() + ' units', 'success')
+        showToast(lang === 'zh' ? `\u60a8\u7684\u85aa\u8d44\uff1a${value.toString()} \u5355\u4f4d` : 'Your salary: ' + value.toString() + ' units', 'success')
       } else {
-        showToast('FHE SDK not ready â€” connect on Sepolia to decrypt', 'error')
+        showToast(tr('FHE SDK not ready \u2014 connect on Sepolia to decrypt', 'FHE SDK \u672a\u5c31\u7eea\uff0c\u8bf7\u8fde\u63a5 Sepolia \u540e\u89e3\u5bc6'), 'error')
       }
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Decryption failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Decryption failed', '\u89e3\u5bc6\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
@@ -729,16 +767,16 @@ function App() {
       const encHandle = await contract.viewMyBalance()
       const handleHex = ethers.hexlify(encHandle)
       if (fhevmRef.current) {
-        showToast('Please sign the decryption request in your wallet...', 'info')
+        showToast(tr('Please sign the decryption request in your wallet...', '\u8bf7\u5728\u94b1\u5305\u4e2d\u7b7e\u540d\u89e3\u5bc6\u8bf7\u6c42...'), 'info')
         const signer = await provider.getSigner()
         const value = await userDecryptHandle(fhevmRef.current, handleHex, contractAddress, signer)
         setMyBalance(value)
-        showToast('Your balance: ' + value.toString() + ' units', 'success')
+        showToast(lang === 'zh' ? `\u60a8\u7684\u4f59\u989d\uff1a${value.toString()} \u5355\u4f4d` : 'Your balance: ' + value.toString() + ' units', 'success')
       } else {
-        showToast('FHE SDK not ready â€” connect on Sepolia to decrypt', 'error')
+        showToast(tr('FHE SDK not ready \u2014 connect on Sepolia to decrypt', 'FHE SDK \u672a\u5c31\u7eea\uff0c\u8bf7\u8fde\u63a5 Sepolia \u540e\u89e3\u5bc6'), 'error')
       }
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Decryption failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Decryption failed', '\u89e3\u5bc6\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
@@ -748,10 +786,10 @@ function App() {
     try {
       const tx = await contract.withdraw()
       await tx.wait()
-      showToast('Withdrawal successful!', 'success')
+      showToast(tr('Withdrawal successful!', '\u63d0\u53d6\u6210\u529f\uff01'), 'success')
       await loadContractData()
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Transaction failed').slice(0, 100), 'error')
+      showToast(errorText(err, 'Transaction failed', '\u4ea4\u6613\u5931\u8d25', 100), 'error')
     } finally { setLoading(null) }
   }
 
@@ -765,25 +803,25 @@ function App() {
   // ============ Governance Handlers ============
 
   const handleDeployGov = async () => {
-    if (!provider || !deployGovOrgName.trim()) { showToast('Enter org name', 'error'); return }
+    if (!provider || !deployGovOrgName.trim()) { showToast(tr('Enter org name', '\u8bf7\u8f93\u5165\u7ec4\u7ec7\u540d\u79f0'), 'error'); return }
     setLoading('deployGov')
     try {
       const signer = await provider.getSigner()
       const factory = new ethers.ContractFactory(GOV_ABI, GOVERNANCE_BYTECODE, signer)
-      showToast('Confirm governance deployment in wallet...', 'info')
+      showToast(tr('Confirm governance deployment in wallet...', '\u8bf7\u5728\u94b1\u5305\u4e2d\u786e\u8ba4\u6cbb\u7406\u5408\u7ea6\u90e8\u7f72...'), 'info')
       const deployed = await factory.deploy(deployGovOrgName.trim())
       await deployed.waitForDeployment()
       const addr = await deployed.getAddress()
       localStorage.setItem(LS_GOV_CONTRACT_KEY, addr)
       setGovContractAddress(addr)
-      showToast('Governance deployed: ' + addr.slice(0, 10) + '...', 'success')
+      showToast(lang === 'zh' ? `\u6cbb\u7406\u5408\u7ea6\u5df2\u90e8\u7f72\uff1a${addr.slice(0, 10)}...` : 'Governance deployed: ' + addr.slice(0, 10) + '...', 'success')
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Deploy failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Deploy failed', '\u90e8\u7f72\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
   const handleConnectGov = (addr: string) => {
-    if (!ethers.isAddress(addr)) { showToast('Invalid address', 'error'); return }
+    if (!ethers.isAddress(addr)) { showToast(tr('Invalid address', '\u5730\u5740\u65e0\u6548'), 'error'); return }
     const a = ethers.getAddress(addr)
     localStorage.setItem(LS_GOV_CONTRACT_KEY, a)
     setGovContractAddress(a)
@@ -801,16 +839,16 @@ function App() {
   }
 
   const handleAddBoardMember = async () => {
-    if (!govContract || !ethers.isAddress(newMemberAddr)) { showToast('Invalid address', 'error'); return }
+    if (!govContract || !ethers.isAddress(newMemberAddr)) { showToast(tr('Invalid address', '\u5730\u5740\u65e0\u6548'), 'error'); return }
     setLoading('addMember')
     try {
       const tx = await govContract.addBoardMember(newMemberAddr)
       await tx.wait()
-      showToast('Board member added', 'success')
+      showToast(tr('Board member added', '\u8463\u4e8b\u6210\u5458\u5df2\u6dfb\u52a0'), 'success')
       setNewMemberAddr('')
       await loadGovData()
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Failed', '\u64cd\u4f5c\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
@@ -820,26 +858,26 @@ function App() {
     try {
       const tx = await govContract.removeBoardMember(addr)
       await tx.wait()
-      showToast('Member removed', 'success')
+      showToast(tr('Member removed', '\u6210\u5458\u5df2\u79fb\u9664'), 'success')
       await loadGovData()
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 100), 'error')
+      showToast(errorText(err, 'Failed', '\u64cd\u4f5c\u5931\u8d25', 100), 'error')
     } finally { setLoading(null) }
   }
 
   const handleCreateProposal = async () => {
-    if (!govContract || !proposalTitle.trim()) { showToast('Enter proposal title', 'error'); return }
+    if (!govContract || !proposalTitle.trim()) { showToast(tr('Enter proposal title', '\u8bf7\u8f93\u5165\u63d0\u6848\u6807\u9898'), 'error'); return }
     const dur = parseInt(proposalDuration)
-    if (!dur || dur <= 0) { showToast('Enter valid duration in seconds', 'error'); return }
+    if (!dur || dur <= 0) { showToast(tr('Enter valid duration in seconds', '\u8bf7\u8f93\u5165\u6709\u6548\u7684\u6295\u7968\u65f6\u957f\uff08\u79d2\uff09'), 'error'); return }
     setLoading('createProposal')
     try {
       const tx = await govContract.createProposal(proposalTitle.trim(), proposalDesc.trim(), dur)
       await tx.wait()
-      showToast('Proposal created!', 'success')
+      showToast(tr('Proposal created!', '\u63d0\u6848\u5df2\u521b\u5efa\uff01'), 'success')
       setProposalTitle(''); setProposalDesc(''); setProposalDuration('')
       await loadGovData()
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Failed', '\u64cd\u4f5c\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
@@ -864,10 +902,10 @@ function App() {
         const tx = await govContract.vote(proposalId, handle, '0x')
         await tx.wait()
       }
-      showToast('Vote cast!', 'success')
+      showToast(tr('Vote cast!', '\u6295\u7968\u5df2\u63d0\u4ea4\uff01'), 'success')
       await loadGovData()
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Vote failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Vote failed', '\u6295\u7968\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
@@ -877,15 +915,15 @@ function App() {
     try {
       const tx = await govContract.finalizeProposal(proposalId)
       await tx.wait()
-      showToast('Proposal finalized â€” results now public', 'success')
+      showToast(tr('Proposal finalized \u2014 results now public', '\u63d0\u6848\u5df2\u7ed3\u7b97\uff0c\u7ed3\u679c\u5df2\u516c\u5f00'), 'success')
       await loadGovData()
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Failed', '\u64cd\u4f5c\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
   const handleDecryptVoteCounts = async (proposalId: number) => {
-    if (!govContract || !provider || !fhevmRef.current) { showToast('FHE SDK not ready', 'error'); return }
+    if (!govContract || !provider || !fhevmRef.current) { showToast(tr('FHE SDK not ready', 'FHE SDK \u672a\u5c31\u7eea'), 'error'); return }
     setLoading('decrypt-' + proposalId)
     try {
       const [encYes, encNo] = await govContract.viewVoteCounts(proposalId)
@@ -894,39 +932,39 @@ function App() {
       const signer = await provider.getSigner()
       const yesVal = await userDecryptHandle(fhevmRef.current, yesHex, govContractAddress, signer)
       const noVal = await userDecryptHandle(fhevmRef.current, noHex, govContractAddress, signer)
-      showToast(`Results: YES ${yesVal} / NO ${noVal}`, 'success')
+      showToast(lang === 'zh' ? `\u7ed3\u679c\uff1a\u8d5e\u6210 ${yesVal} / \u53cd\u5bf9 ${noVal}` : `Results: YES ${yesVal} / NO ${noVal}`, 'success')
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Decrypt failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Decrypt failed', '\u89e3\u5bc6\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
   // ============ Compliance Handlers ============
 
   const handleAddAuditor = async () => {
-    if (!contract || !ethers.isAddress(auditorAddr)) { showToast('Invalid address', 'error'); return }
+    if (!contract || !ethers.isAddress(auditorAddr)) { showToast(tr('Invalid address', '\u5730\u5740\u65e0\u6548'), 'error'); return }
     setLoading('addAuditor')
     try {
       const tx = await contract.addAuditor(auditorAddr)
       await tx.wait()
-      showToast('Auditor added', 'success')
+      showToast(tr('Auditor added', '\u5ba1\u8ba1\u5458\u5df2\u6dfb\u52a0'), 'success')
       setAuditorAddr('')
       await loadComplianceData()
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Failed', '\u64cd\u4f5c\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
   const handleAddTaxAuthority = async () => {
-    if (!contract || !ethers.isAddress(taxAuthAddr)) { showToast('Invalid address', 'error'); return }
+    if (!contract || !ethers.isAddress(taxAuthAddr)) { showToast(tr('Invalid address', '\u5730\u5740\u65e0\u6548'), 'error'); return }
     setLoading('addTax')
     try {
       const tx = await contract.addTaxAuthority(taxAuthAddr)
       await tx.wait()
-      showToast('Tax authority added', 'success')
+      showToast(tr('Tax authority added', '\u7a0e\u52a1\u673a\u5173\u5df2\u6dfb\u52a0'), 'success')
       setTaxAuthAddr('')
       await loadComplianceData()
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Failed', '\u64cd\u4f5c\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
@@ -941,17 +979,17 @@ function App() {
         compliancePolicy.employeeZk,
       )
       await tx.wait()
-      showToast('Compliance policy updated', 'success')
+      showToast(tr('Compliance policy updated', '\u5408\u89c4\u7b56\u7565\u5df2\u66f4\u65b0'), 'success')
       await loadComplianceData()
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Failed', '\u64cd\u4f5c\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
   const handleSaveComplianceRecord = async (targetAddress?: string) => {
     if (!contract) return
     const subject = targetAddress || complianceSubject || account || ''
-    if (!ethers.isAddress(subject)) { showToast('Enter a valid address to register compliance', 'error'); return }
+    if (!ethers.isAddress(subject)) { showToast(tr('Enter a valid address to register compliance', '\u8bf7\u8f93\u5165\u6709\u6548\u5730\u5740\u4ee5\u767b\u8bb0\u5408\u89c4\u8bb0\u5f55'), 'error'); return }
     setLoading('setComplianceRecord')
     try {
       const tx = await contract.setComplianceRecord(
@@ -970,23 +1008,23 @@ function App() {
       await loadComplianceData()
       await loadContractData()
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Failed', '\u64cd\u4f5c\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
   const handleSetMinWage = async () => {
     if (!contract) return
     const val = parseInt(minWageInput)
-    if (!val || val <= 0) { showToast('Enter valid minimum wage', 'error'); return }
+    if (!val || val <= 0) { showToast(tr('Enter valid minimum wage', '\u8bf7\u8f93\u5165\u6709\u6548\u7684\u6700\u4f4e\u5de5\u8d44'), 'error'); return }
     setLoading('setMinWage')
     try {
       const tx = await contract.setMinimumWage(val)
       await tx.wait()
-      showToast('Minimum wage set to ' + val, 'success')
+      showToast(lang === 'zh' ? `\u6700\u4f4e\u5de5\u8d44\u5df2\u8bbe\u4e3a ${val}` : 'Minimum wage set to ' + val, 'success')
       setMinWageInput('')
       await loadComplianceData()
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Failed', '\u64cd\u4f5c\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
@@ -996,14 +1034,14 @@ function App() {
     try {
       const tx = await contract.complianceCheck()
       await tx.wait()
-      showToast('Solvency check executed. Use decrypt to view result.', 'success')
+      showToast(tr('Solvency check executed. Use decrypt to view result.', '\u507f\u4ed8\u68c0\u67e5\u5df2\u6267\u884c\uff0c\u8bf7\u70b9\u51fb\u89e3\u5bc6\u67e5\u770b\u7ed3\u679c\u3002'), 'success')
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Failed', '\u64cd\u4f5c\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
   const handleDecryptSolvency = async () => {
-    if (!contract || !provider || !fhevmRef.current) { showToast('FHE SDK not ready', 'error'); return }
+    if (!contract || !provider || !fhevmRef.current) { showToast(tr('FHE SDK not ready', 'FHE SDK \u672a\u5c31\u7eea'), 'error'); return }
     setLoading('decryptSolvency')
     try {
       const encHandle = await contract.viewSolvencyResult()
@@ -1024,15 +1062,20 @@ function App() {
         [contractAddress], await signer.getAddress(), startTimestamp, 1,
       )
       const val = results[handleHex as `0x${string}`]
-      showToast(val ? 'âś… Company is SOLVENT' : 'âťŚ Company is INSOLVENT', val ? 'success' : 'error')
+      showToast(
+        val
+          ? tr('Company is SOLVENT', '\u516c\u53f8\u507f\u4ed8\u80fd\u529b\u5145\u8db3')
+          : tr('Company is INSOLVENT', '\u516c\u53f8\u507f\u4ed8\u80fd\u529b\u4e0d\u8db3'),
+        val ? 'success' : 'error',
+      )
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Decrypt failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Decrypt failed', '\u89e3\u5bc6\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
   const decryptBooleanHandle = async (handleSource: Promise<string> | Promise<Uint8Array> | Promise<unknown>) => {
     if (!provider || !fhevmRef.current) {
-      throw new Error('FHE SDK not ready')
+      throw new Error(tr('FHE SDK not ready', 'FHE SDK \u672a\u5c31\u7eea'))
     }
 
     const signer = await provider.getSigner()
@@ -1061,54 +1104,64 @@ function App() {
       if (addr) {
         const tx = await contract.verifyMinimumWage(addr)
         await tx.wait()
-        showToast('Min wage check done for ' + addr.slice(0, 8) + '...', 'success')
+        showToast(lang === 'zh' ? `${addr.slice(0, 8)}... \u7684\u6700\u4f4e\u5de5\u8d44\u6821\u9a8c\u5df2\u5b8c\u6210` : 'Min wage check done for ' + addr.slice(0, 8) + '...', 'success')
       } else {
         const tx = await contract.verifyAllMinimumWage()
         await tx.wait()
-        showToast('Batch min wage check done. Decrypt to view.', 'success')
+        showToast(tr('Batch min wage check done. Decrypt to view.', '\u6279\u91cf\u6700\u4f4e\u5de5\u8d44\u6821\u9a8c\u5df2\u5b8c\u6210\uff0c\u8bf7\u89e3\u5bc6\u67e5\u770b\u3002'), 'success')
       }
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Failed', '\u64cd\u4f5c\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
   const handleDecryptMinWageResult = async () => {
-    if (!contract || !provider || !fhevmRef.current) { showToast('FHE SDK not ready', 'error'); return }
-    if (!ethers.isAddress(minWageCheckAddr)) { showToast('Enter an employee address first', 'error'); return }
+    if (!contract || !provider || !fhevmRef.current) { showToast(tr('FHE SDK not ready', 'FHE SDK \u672a\u5c31\u7eea'), 'error'); return }
+    if (!ethers.isAddress(minWageCheckAddr)) { showToast(tr('Enter an employee address first', '\u8bf7\u5148\u8f93\u5165\u5458\u5de5\u5730\u5740'), 'error'); return }
     setLoading('decryptMinWage')
     try {
       const result = await decryptBooleanHandle(contract.viewMinWageResult(minWageCheckAddr))
-      showToast(result ? 'âś… Employee meets minimum wage' : 'âťŚ Employee is below minimum wage', result ? 'success' : 'error')
+      showToast(
+        result
+          ? tr('Employee meets minimum wage', '\u8be5\u5458\u5de5\u7b26\u5408\u6700\u4f4e\u5de5\u8d44')
+          : tr('Employee is below minimum wage', '\u8be5\u5458\u5de5\u4f4e\u4e8e\u6700\u4f4e\u5de5\u8d44'),
+        result ? 'success' : 'error',
+      )
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Decrypt failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Decrypt failed', '\u89e3\u5bc6\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
   const handleDecryptAllMinWage = async () => {
-    if (!contract || !provider || !fhevmRef.current) { showToast('FHE SDK not ready', 'error'); return }
+    if (!contract || !provider || !fhevmRef.current) { showToast(tr('FHE SDK not ready', 'FHE SDK \u672a\u5c31\u7eea'), 'error'); return }
     setLoading('decryptAllMinWage')
     try {
       const result = await decryptBooleanHandle(contract.viewAllMinWageResult())
-      showToast(result ? 'âś… All employees meet minimum wage' : 'âťŚ At least one employee is below minimum wage', result ? 'success' : 'error')
+      showToast(
+        result
+          ? tr('All employees meet minimum wage', '\u6240\u6709\u5458\u5de5\u5747\u7b26\u5408\u6700\u4f4e\u5de5\u8d44')
+          : tr('At least one employee is below minimum wage', '\u81f3\u5c11\u6709\u4e00\u540d\u5458\u5de5\u4f4e\u4e8e\u6700\u4f4e\u5de5\u8d44'),
+        result ? 'success' : 'error',
+      )
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Decrypt failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Decrypt failed', '\u89e3\u5bc6\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
   const handleDecryptTotalExpense = async () => {
-    if (!contract || !provider || !fhevmRef.current) { showToast('FHE SDK not ready', 'error'); return }
+    if (!contract || !provider || !fhevmRef.current) { showToast(tr('FHE SDK not ready', 'FHE SDK \u672a\u5c31\u7eea'), 'error'); return }
     setLoading('decryptExpense')
     try {
       let encHandle
       if (isAuditor) encHandle = await contract.viewTotalExpense()
       else if (isTaxAuthority) encHandle = await contract.viewTotalExpenseAsTax()
-      else { showToast('Not authorized', 'error'); return }
+      else { showToast(tr('Not authorized', '\u65e0\u6743\u9650'), 'error'); return }
       const handleHex = ethers.hexlify(encHandle)
       const signer = await provider.getSigner()
       const value = await userDecryptHandle(fhevmRef.current, handleHex, contractAddress, signer)
-      showToast('Total payroll expense: ' + value.toString(), 'success')
+      showToast(lang === 'zh' ? `\u603b\u85aa\u8d44\u652f\u51fa\uff1a${value.toString()}` : 'Total payroll expense: ' + value.toString(), 'success')
     } catch (err: unknown) {
-      showToast((err instanceof Error ? err.message : 'Decrypt failed').slice(0, 120), 'error')
+      showToast(errorText(err, 'Decrypt failed', '\u89e3\u5bc6\u5931\u8d25'), 'error')
     } finally { setLoading(null) }
   }
 
@@ -1122,9 +1175,9 @@ function App() {
         style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px', padding: '2rem', minWidth: '340px', maxWidth: '400px' }}
         onClick={e => e.stopPropagation()}
       >
-        <h2 style={{ marginBottom: '0.5rem', fontSize: '1.2rem' }}>Connect Wallet</h2>
+        <h2 style={{ marginBottom: '0.5rem', fontSize: '1.2rem' }}>{tr('Connect Wallet', '\u8fde\u63a5\u94b1\u5305')}</h2>
         <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-          You will be switched to <strong style={{ color: 'var(--accent)' }}>{TARGET_NETWORK.chainName}</strong>
+          {tr('You will be switched to', '\u5c06\u4e3a\u60a8\u5207\u6362\u5230')} <strong style={{ color: 'var(--accent)' }}>{TARGET_NETWORK.chainName}</strong>
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
           {wallets.map(w => (
@@ -1145,10 +1198,10 @@ function App() {
             >
               <span style={{ fontSize: '1.8rem' }}>{w.icon}</span>
               <div>
-                <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{w.name}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{w.available ? w.description : 'Not installed'}</div>
+                <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{walletDisplayName(w)}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{walletDescription(w)}</div>
               </div>
-              {w.available && <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: 'var(--success)' }}>Detected</span>}
+              {w.available && <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: 'var(--success)' }}>{tr('Detected', '\u5df2\u68c0\u6d4b')}</span>}
             </button>
           ))}
         </div>
@@ -1203,7 +1256,9 @@ function App() {
             {loading === 'deploy' ? <><span className="loading"></span>{t.deploying}</> : t.deployBtn}
           </button>
           <p style={{ color: 'var(--text-dim)', fontSize: '0.8rem', marginTop: '0.75rem', textAlign: 'center' }}>
-            This sends a transaction on {TARGET_NETWORK.chainName}
+            {lang === 'zh'
+              ? `\u8fd9\u5c06\u5728 ${TARGET_NETWORK.chainName} \u4e0a\u53d1\u9001\u4ea4\u6613`
+              : `This sends a transaction on ${TARGET_NETWORK.chainName}`}
           </p>
         </>
       )}
@@ -1233,7 +1288,9 @@ function App() {
             {t.connect}
           </button>
           <p style={{ color: 'var(--text-dim)', fontSize: '0.8rem', marginTop: '0.75rem', textAlign: 'center' }}>
-            Demo contract (Zama Corp): 0x6dF4438C80D908B450a214eEF2A8DAAC748936AE
+            {lang === 'zh'
+              ? `\u793a\u4f8b\u5408\u7ea6\uff08Zama Corp\uff09\uff1a 0x6dF4438C80D908B450a214eEF2A8DAAC748936AE`
+              : 'Demo contract (Zama Corp): 0x6dF4438C80D908B450a214eEF2A8DAAC748936AE'}
           </p>
         </>
       )}
@@ -1321,7 +1378,7 @@ function App() {
             <span>{networkName || TARGET_NETWORK.chainName}</span>
           </div>
           <div>
-            <strong>Relayer</strong>
+            <strong>{t.relayer}</strong>
             <span>{TESTNET_RUNTIME.relayerUrl.replace('https://', '')}</span>
           </div>
           <div>
@@ -1352,7 +1409,7 @@ function App() {
       <section className="hero-panel hero-panel--dashboard">
         <div className="hero-copy">
           <span className="eyebrow">{networkName || TARGET_NETWORK.chainName} &middot; {fhevmRef.current ? t.fheLive : t.sepoliaOnly}</span>
-          <h1 className="hero-title">{companyName || 'Payroll Console'}</h1>
+          <h1 className="hero-title">{companyName || tr('Payroll Console', '\u85aa\u8d44\u63a7\u5236\u53f0')}</h1>
           <div className="chip-row">
             {isEmployer && <span className="chip">{t.employer}</span>}
             {isEmployee && <span className="chip">{t.employee}</span>}
@@ -1374,7 +1431,9 @@ function App() {
         </div>
         <div>
           <strong>{t.proofMode}</strong>
-          <span>{fhevmRef.current ? 'Zama relayer + inputProof live' : 'Mock/local fallback'}</span>
+          <span>{fhevmRef.current
+            ? tr('Zama relayer + inputProof live', 'Zama \u4e2d\u7ee7\u5668 + inputProof \u5b9e\u65f6')
+            : tr('Mock/local fallback', '\u672c\u5730 Mock \u56de\u9000')}</span>
         </div>
         <div>
           <strong>{t.kycPolicy}</strong>
@@ -1403,43 +1462,43 @@ function App() {
       {isEmployer && (
         <>
           <div className="card">
-            <h2>Treasury</h2>
+            <h2>{tr('Treasury', '\u8d44\u91d1\u6c60')}</h2>
             <div className="info-row">
-              <span className="info-label">Treasury Balance</span>
+              <span className="info-label">{tr('Treasury Balance', '\u8d44\u91d1\u6c60\u4f59\u989d')}</span>
               <span className="encrypted-value">[Encrypted]</span>
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-              <input type="number" placeholder="Amount to deposit" value={depositAmount}
+              <input type="number" placeholder={tr('Amount to deposit', '\u5b58\u5165\u91d1\u989d')} value={depositAmount}
                 onChange={e => setDepositAmount(e.target.value)}
                 style={{ flex: 1, padding: '0.6rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)' }} />
               <button className="btn btn-primary" onClick={handleDeposit} disabled={loading === 'deposit'}>
-                {loading === 'deposit' ? <><span className="loading"></span>Depositing...</> : 'Deposit'}
+                {loading === 'deposit' ? <><span className="loading"></span>{tr('Depositing...', '\u5b58\u5165\u4e2d\u2026')}</> : tr('Deposit', '\u5b58\u5165')}
               </button>
             </div>
           </div>
 
           <div className="card">
-            <h2>Add Employee</h2>
+            <h2>{tr('Add Employee', '\u6dfb\u52a0\u5458\u5de5')}</h2>
             <div className="input-group">
-              <label>Employee Wallet Address</label>
+              <label>{tr('Employee Wallet Address', '\u5458\u5de5\u94b1\u5305\u5730\u5740')}</label>
               <input type="text" placeholder="0x..." value={newEmpAddress} onChange={e => setNewEmpAddress(e.target.value)} />
             </div>
             <div className="input-group">
-              <label>Monthly Salary (encrypted on-chain â€” only the employee can decrypt)</label>
+              <label>{tr('Monthly Salary (encrypted on-chain \u2014 only the employee can decrypt)', '\u6708\u85aa\uff08\u94fe\u4e0a\u52a0\u5bc6\uff0c\u4ec5\u8be5\u5458\u5de5\u53ef\u89e3\u5bc6\uff09')}</label>
               <input type="number" placeholder="5000" value={newEmpSalary} onChange={e => setNewEmpSalary(e.target.value)} />
             </div>
             <button className="btn btn-primary" onClick={handleAddEmployee} disabled={loading === 'addEmployee'}>
-              {loading === 'addEmployee' ? <><span className="loading"></span>Adding...</> : '+ Add Employee'}
+              {loading === 'addEmployee' ? <><span className="loading"></span>{tr('Adding...', '\u6dfb\u52a0\u4e2d\u2026')}</> : tr('+ Add Employee', '+ \u6dfb\u52a0\u5458\u5de5')}
             </button>
           </div>
 
           <div className="card">
-            <h2>Employee List</h2>
+            <h2>{tr('Employee List', '\u5458\u5de5\u5217\u8868')}</h2>
             {employees.length === 0 ? (
-              <p style={{ color: 'var(--text-dim)', textAlign: 'center', padding: '1rem' }}>No employees yet â€” add one above</p>
+              <p style={{ color: 'var(--text-dim)', textAlign: 'center', padding: '1rem' }}>{tr('No employees yet \u2014 add one above', '\u8fd8\u6ca1\u6709\u5458\u5de5\uff0c\u8bf7\u5148\u5728\u4e0a\u65b9\u6dfb\u52a0')}</p>
             ) : (
               <table>
-                <thead><tr><th>Address</th><th>Salary</th><th>Status</th><th>Actions</th></tr></thead>
+                <thead><tr><th>{tr('Address', '\u5730\u5740')}</th><th>{tr('Salary', '\u85aa\u8d44')}</th><th>{tr('Status', '\u72b6\u6001')}</th><th>{tr('Actions', '\u64cd\u4f5c')}</th></tr></thead>
                 <tbody>
                   {employees.map(emp => (
                     <tr key={emp}>
@@ -1447,11 +1506,11 @@ function App() {
                       <td><span className="encrypted-value">[Encrypted]</span></td>
                       <td>
                         <span className={'status-dot ' + (paidStatus[emp] ? 'paid' : 'unpaid')}></span>
-                        {paidStatus[emp] ? 'Paid' : 'Unpaid'}
+                        {paidStatus[emp] ? tr('Paid', '\u5df2\u652f\u4ed8') : tr('Unpaid', '\u672a\u652f\u4ed8')}
                       </td>
                       <td>
                         <button className="btn btn-danger" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
-                          onClick={() => handleRemoveEmployee(emp)}>Remove</button>
+                          onClick={() => handleRemoveEmployee(emp)}>{tr('Remove', '\u79fb\u9664')}</button>
                       </td>
                     </tr>
                   ))}
@@ -1460,27 +1519,27 @@ function App() {
             )}
             <div className="actions">
               <button className="btn btn-success" onClick={handleExecutePay} disabled={loading === 'pay' || employees.length === 0}>
-                {loading === 'pay' ? <><span className="loading"></span>Processing...</> : 'Execute Payroll'}
+                {loading === 'pay' ? <><span className="loading"></span>{tr('Processing...', '\u5904\u7406\u4e2d\u2026')}</> : tr('Execute Payroll', '\u6267\u884c\u53d1\u85aa')}
               </button>
               <button className="btn btn-outline" onClick={handleResetCycle} disabled={loading === 'reset'}>
-                Reset Cycle
+                {tr('Reset Cycle', '\u91cd\u7f6e\u5468\u671f')}
               </button>
             </div>
           </div>
 
           {/* Share with employees */}
           <div className="card" style={{ borderColor: 'var(--accent)' }}>
-            <h2>Share with Employees</h2>
+            <h2>{tr('Share with Employees', '\u5206\u4eab\u7ed9\u5458\u5de5')}</h2>
             <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
-              Send this contract address to your employees. They paste it on the setup screen after connecting their wallet.
+              {tr('Send this contract address to your employees. They paste it on the setup screen after connecting their wallet.', '\u628a\u8fd9\u4e2a\u5408\u7ea6\u5730\u5740\u53d1\u7ed9\u5458\u5de5\uff0c\u4ed6\u4eec\u8fde\u63a5\u94b1\u5305\u540e\u5728\u8bbe\u7f6e\u9875\u7c98\u8d34\u5373\u53ef\u52a0\u5165\u3002')}
             </p>
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <code style={{ flex: 1, padding: '0.6rem', background: 'var(--bg)', borderRadius: '6px', fontSize: '0.85rem', wordBreak: 'break-all' }}>
                 {contractAddress}
               </code>
               <button className="btn btn-outline" style={{ padding: '0.5rem 0.75rem', whiteSpace: 'nowrap' }}
-                onClick={() => { navigator.clipboard.writeText(contractAddress); showToast('Copied!', 'success') }}>
-                Copy
+                onClick={() => { navigator.clipboard.writeText(contractAddress); showToast(tr('Copied!', '\u5df2\u590d\u5236\uff01'), 'success') }}>
+                {tr('Copy', '\u590d\u5236')}
               </button>
             </div>
           </div>
@@ -1490,37 +1549,37 @@ function App() {
       {/* Employee Dashboard */}
       {isEmployee && (
         <div className="card">
-          <h2>My Payroll</h2>
+          <h2>{tr('My Payroll', '\u6211\u7684\u85aa\u8d44')}</h2>
           <div className="info-row">
-            <span className="info-label">My Salary</span>
+            <span className="info-label">{tr('My Salary', '\u6211\u7684\u85aa\u8d44')}</span>
             {mySalary !== null
-              ? <span className="info-value">{mySalary.toString()} <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>units</span></span>
+              ? <span className="info-value">{mySalary.toString()} <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>{tr('units', '\u5355\u4f4d')}</span></span>
               : <span className="encrypted-value">[Encrypted] </span>}
           </div>
           <div className="info-row">
-            <span className="info-label">My Balance</span>
+            <span className="info-label">{tr('My Balance', '\u6211\u7684\u4f59\u989d')}</span>
             {myBalance !== null
-              ? <span className="info-value">{myBalance.toString()} <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>units</span></span>
+              ? <span className="info-value">{myBalance.toString()} <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>{tr('units', '\u5355\u4f4d')}</span></span>
               : <span className="encrypted-value">[Encrypted] </span>}
           </div>
           <div className="info-row">
-            <span className="info-label">This Cycle</span>
-            <span>{paidStatus[account] ? 'âś… Paid' : 'âŹł Pending'}</span>
+            <span className="info-label">{tr('This Cycle', '\u672c\u5468\u671f')}</span>
+            <span>{paidStatus[account] ? tr('Paid', '\u5df2\u652f\u4ed8') : tr('Pending', '\u5f85\u652f\u4ed8')}</span>
           </div>
           {!fhevmRef.current && (
             <p style={{ color: 'var(--warning)', fontSize: '0.8rem', marginTop: '0.5rem' }}>
-              FHE SDK not ready â€” connect on Sepolia to decrypt values
+              {tr('FHE SDK not ready \u2014 connect on Sepolia to decrypt values', 'FHE SDK \u672a\u5c31\u7eea\uff0c\u8bf7\u8fde\u63a5 Sepolia \u540e\u518d\u89e3\u5bc6')}
             </p>
           )}
           <div className="actions">
             <button className="btn btn-primary" onClick={handleViewSalary} disabled={loading === 'viewSalary'}>
-              {loading === 'viewSalary' ? <><span className="loading"></span>Decrypting...</> : 'đź”“ Decrypt Salary'}
+              {loading === 'viewSalary' ? <><span className="loading"></span>{tr('Decrypting...', '\u89e3\u5bc6\u4e2d\u2026')}</> : tr('Decrypt Salary', '\u89e3\u5bc6\u85aa\u8d44')}
             </button>
             <button className="btn btn-outline" onClick={handleViewBalance} disabled={loading === 'viewBalance'}>
-              {loading === 'viewBalance' ? <><span className="loading"></span>Decrypting...</> : 'đź’° Decrypt Balance'}
+              {loading === 'viewBalance' ? <><span className="loading"></span>{tr('Decrypting...', '\u89e3\u5bc6\u4e2d\u2026')}</> : tr('Decrypt Balance', '\u89e3\u5bc6\u4f59\u989d')}
             </button>
             <button className="btn btn-success" onClick={handleWithdraw} disabled={loading === 'withdraw'}>
-              {loading === 'withdraw' ? <><span className="loading"></span>Processing...</> : 'đź“¤ Withdraw'}
+              {loading === 'withdraw' ? <><span className="loading"></span>{tr('Processing...', '\u5904\u7406\u4e2d\u2026')}</> : tr('Withdraw', '\u63d0\u53d6')}
             </button>
           </div>
         </div>
@@ -1529,20 +1588,22 @@ function App() {
       {/* Access Restricted */}
       {!isEmployer && !isEmployee && (
         <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
-          <div className="lock-icon">đź”’</div>
-          <h2 style={{ justifyContent: 'center' }}>Access Restricted</h2>
+          <div className="lock-icon">LOCK</div>
+          <h2 style={{ justifyContent: 'center' }}>{tr('Access Restricted', '\u8bbf\u95ee\u53d7\u9650')}</h2>
           <p style={{ color: 'var(--text-dim)', marginBottom: '1rem' }}>
-            Your address ({shortAddr(account)}) is not the employer or an employee of this contract.
+            {lang === 'zh'
+              ? `\u60a8\u7684\u5730\u5740\uff08${shortAddr(account)}\uff09\u4e0d\u662f\u8be5\u5408\u7ea6\u7684\u96c7\u4e3b\u6216\u5458\u5de5\u3002`
+              : `Your address (${shortAddr(account)}) is not the employer or an employee of this contract.`}
           </p>
           <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '2rem' }}>
-            Contract: {shortAddr(contractAddress)}
+            {tr('Contract', '\u5408\u7ea6')}: {shortAddr(contractAddress)}
           </p>
           <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
             <button className="btn btn-outline" onClick={handleClearContract}>
-              Use a Different Contract
+              {tr('Use a Different Contract', '\u4f7f\u7528\u5176\u4ed6\u5408\u7ea6')}
             </button>
             <button className="btn btn-primary" onClick={() => { localStorage.removeItem(LS_CONTRACT_KEY); setContractAddress(''); setContract(null); setIsEmployer(false); setIsEmployee(false); setCompanyName(''); setEmployees([]); setExistingAddrInput(''); setDeployCompanyName(''); setSetupMode('deploy'); setShowSetup(true); }}>
-              đźŹ˘ Deploy My Own Payroll
+              {tr('Deploy My Own Payroll', '\u90e8\u7f72\u6211\u81ea\u5df1\u7684\u85aa\u8d44\u5408\u7ea6')}
             </button>
           </div>
         </div>
@@ -1554,19 +1615,19 @@ function App() {
       {activeTab === 'governance' && <>
         {!govContractAddress ? (
           <div className="card" style={{ maxWidth: '520px', margin: '2rem auto' }}>
-            <h2>Board Governance</h2>
-            <p style={{ color: 'var(--text-dim)', marginBottom: '1.5rem' }}>Deploy a new governance contract or connect to an existing one.</p>
+            <h2>{tr('Board Governance', '\u8463\u4e8b\u4f1a\u6cbb\u7406')}</h2>
+            <p style={{ color: 'var(--text-dim)', marginBottom: '1.5rem' }}>{tr('Deploy a new governance contract or connect to an existing one.', '\u90e8\u7f72\u65b0\u7684\u6cbb\u7406\u5408\u7ea6\uff0c\u6216\u8fde\u63a5\u5df2\u6709\u5408\u7ea6\u3002')}</p>
             <div className="input-group">
-              <label>Organization Name</label>
-              <input type="text" placeholder="e.g. Zama Corp Board" value={deployGovOrgName} onChange={e => setDeployGovOrgName(e.target.value)} />
+              <label>{tr('Organization Name', '\u7ec4\u7ec7\u540d\u79f0')}</label>
+              <input type="text" placeholder={tr('e.g. Zama Corp Board', '\u4f8b\u5982\uff1aZama Corp Board')} value={deployGovOrgName} onChange={e => setDeployGovOrgName(e.target.value)} />
             </div>
             <button className="btn btn-primary" style={{ width: '100%', marginBottom: '1rem' }}
               onClick={handleDeployGov} disabled={loading === 'deployGov' || !deployGovOrgName.trim()}>
-              {loading === 'deployGov' ? <><span className="loading"></span>Deploying...</> : 'đźš€ Deploy Governance Contract'}
+              {loading === 'deployGov' ? <><span className="loading"></span>{tr('Deploying...', '\u90e8\u7f72\u4e2d\u2026')}</> : tr('Deploy Governance Contract', '\u90e8\u7f72\u6cbb\u7406\u5408\u7ea6')}
             </button>
             <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '1rem 0' }} />
             <div className="input-group">
-              <label>Or Enter Existing Contract Address</label>
+              <label>{tr('Or Enter Existing Contract Address', '\u6216\u8f93\u5165\u5df2\u6709\u5408\u7ea6\u5730\u5740')}</label>
               <input type="text" placeholder="0x..." onKeyDown={e => { if (e.key === 'Enter') handleConnectGov((e.target as HTMLInputElement).value) }}
                 onChange={e => { if (ethers.isAddress(e.target.value)) handleConnectGov(e.target.value) }} />
             </div>
@@ -1575,19 +1636,19 @@ function App() {
           <>
             <div className="card" style={{ borderColor: 'var(--accent)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h2>{govOrgName || 'Governance'}</h2>
-                <button className="btn btn-outline" style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }} onClick={handleClearGov}>Change Contract</button>
+                <h2>{govOrgName || tr('Governance', '\u6cbb\u7406')}</h2>
+                <button className="btn btn-outline" style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }} onClick={handleClearGov}>{t.changeContract}</button>
               </div>
               <div className="info-row">
-                <span className="info-label">Contract</span>
+                <span className="info-label">{tr('Contract', '\u5408\u7ea6')}</span>
                 <span style={{ fontSize: '0.85rem' }}>{shortAddr(govContractAddress)}</span>
               </div>
               <div className="info-row">
-                <span className="info-label">Board Members</span>
+                <span className="info-label">{tr('Board Members', '\u8463\u4e8b\u6210\u5458')}</span>
                 <span>{boardMembers.length}</span>
               </div>
               <div className="info-row">
-                <span className="info-label">Proposals</span>
+                <span className="info-label">{tr('Proposals', '\u63d0\u6848')}</span>
                 <span>{proposals.length}</span>
               </div>
             </div>
@@ -1595,24 +1656,24 @@ function App() {
             {/* Admin: manage board */}
             {isAdmin && (
               <div className="card">
-                <h2>Board Management</h2>
+                <h2>{tr('Board Management', '\u8463\u4e8b\u4f1a\u7ba1\u7406')}</h2>
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-                  <input type="text" placeholder="Board member address 0x..." value={newMemberAddr}
+                  <input type="text" placeholder={tr('Board member address 0x...', '\u8463\u4e8b\u6210\u5458\u5730\u5740 0x...')} value={newMemberAddr}
                     onChange={e => setNewMemberAddr(e.target.value)}
                     style={{ flex: 1, padding: '0.6rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)' }} />
                   <button className="btn btn-primary" onClick={handleAddBoardMember} disabled={loading === 'addMember'}>
-                    {loading === 'addMember' ? <span className="loading"></span> : '+ Add'}
+                    {loading === 'addMember' ? <span className="loading"></span> : tr('+ Add', '+ \u6dfb\u52a0')}
                   </button>
                 </div>
                 {boardMembers.length > 0 && (
                   <table>
-                    <thead><tr><th>Member</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>{tr('Member', '\u6210\u5458')}</th><th>{tr('Actions', '\u64cd\u4f5c')}</th></tr></thead>
                     <tbody>
                       {boardMembers.map(m => (
                         <tr key={m}>
                           <td title={m}>{shortAddr(m)}</td>
                           <td><button className="btn btn-danger" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
-                            onClick={() => handleRemoveBoardMember(m)}>Remove</button></td>
+                            onClick={() => handleRemoveBoardMember(m)}>{tr('Remove', '\u79fb\u9664')}</button></td>
                         </tr>
                       ))}
                     </tbody>
@@ -1624,30 +1685,30 @@ function App() {
             {/* Admin: create proposal */}
             {isAdmin && (
               <div className="card">
-                <h2>Create Proposal</h2>
+                <h2>{tr('Create Proposal', '\u521b\u5efa\u63d0\u6848')}</h2>
                 <div className="input-group">
-                  <label>Title</label>
-                  <input type="text" placeholder="e.g. Increase Q2 Budget" value={proposalTitle} onChange={e => setProposalTitle(e.target.value)} />
+                  <label>{tr('Title', '\u6807\u9898')}</label>
+                  <input type="text" placeholder={tr('e.g. Increase Q2 Budget', '\u4f8b\u5982\uff1a\u63d0\u9ad8 Q2 \u9884\u7b97')} value={proposalTitle} onChange={e => setProposalTitle(e.target.value)} />
                 </div>
                 <div className="input-group">
-                  <label>Description</label>
-                  <input type="text" placeholder="Details of the proposal..." value={proposalDesc} onChange={e => setProposalDesc(e.target.value)} />
+                  <label>{tr('Description', '\u63cf\u8ff0')}</label>
+                  <input type="text" placeholder={tr('Details of the proposal...', '\u586b\u5199\u63d0\u6848\u8be6\u60c5...')} value={proposalDesc} onChange={e => setProposalDesc(e.target.value)} />
                 </div>
                 <div className="input-group">
-                  <label>Voting Duration (seconds)</label>
-                  <input type="number" placeholder="3600 = 1 hour" value={proposalDuration} onChange={e => setProposalDuration(e.target.value)} />
+                  <label>{tr('Voting Duration (seconds)', '\u6295\u7968\u65f6\u957f\uff08\u79d2\uff09')}</label>
+                  <input type="number" placeholder={tr('3600 = 1 hour', '3600 = 1 \u5c0f\u65f6')} value={proposalDuration} onChange={e => setProposalDuration(e.target.value)} />
                 </div>
                 <button className="btn btn-primary" onClick={handleCreateProposal} disabled={loading === 'createProposal'}>
-                  {loading === 'createProposal' ? <><span className="loading"></span>Creating...</> : '+ Create Proposal'}
+                  {loading === 'createProposal' ? <><span className="loading"></span>{tr('Creating...', '\u521b\u5efa\u4e2d\u2026')}</> : tr('+ Create Proposal', '+ \u521b\u5efa\u63d0\u6848')}
                 </button>
               </div>
             )}
 
             {/* Proposals list */}
             <div className="card">
-              <h2>Proposals ({proposals.length})</h2>
+              <h2>{lang === 'zh' ? `\u63d0\u6848 (${proposals.length})` : `Proposals (${proposals.length})`}</h2>
               {proposals.length === 0 ? (
-                <p style={{ color: 'var(--text-dim)', textAlign: 'center', padding: '1rem' }}>No proposals yet</p>
+                <p style={{ color: 'var(--text-dim)', textAlign: 'center', padding: '1rem' }}>{tr('No proposals yet', '\u8fd8\u6ca1\u6709\u63d0\u6848')}</p>
               ) : proposals.map(p => {
                 const now = Math.floor(Date.now() / 1000)
                 const isActive = now >= p.startTime && now <= p.endTime && !p.isFinalized
@@ -1658,38 +1719,44 @@ function App() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                       <strong>#{p.id}: {p.title}</strong>
                       <span className={'badge ' + (p.isFinalized ? 'badge-employer' : isActive ? 'badge-employee' : 'badge-encrypted')}>
-                        {p.isFinalized ? 'Finalized' : isActive ? 'Active' : isEnded ? 'Ended' : 'Pending'}
+                        {p.isFinalized
+                          ? tr('Finalized', '\u5df2\u5b8c\u6210')
+                          : isActive
+                            ? tr('Active', '\u8fdb\u884c\u4e2d')
+                            : isEnded
+                              ? tr('Ended', '\u5df2\u7ed3\u675f')
+                              : tr('Pending', '\u5f85\u5f00\u59cb')}
                       </span>
                     </div>
                     <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>{p.description}</p>
                     <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '0.75rem' }}>
-                      <span>Voters: {p.voterCount}</span>
-                      <span>Â·</span>
-                      <span>Ends: {new Date(p.endTime * 1000).toLocaleString()}</span>
+                      <span>{tr('Voters', '\u6295\u7968\u4eba')}: {p.voterCount}</span>
+                      <span>&middot;</span>
+                      <span>{tr('Ends', '\u622a\u6b62\u65f6\u95f4')}: {new Date(p.endTime * 1000).toLocaleString()}</span>
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                       {isActive && isBoardMember && (
                         <>
                           <button className="btn btn-success" style={{ fontSize: '0.85rem', padding: '0.4rem 1rem' }}
                             onClick={() => handleVote(p.id, true)} disabled={loading === 'vote-' + p.id}>
-                            {loading === 'vote-' + p.id ? <span className="loading"></span> : 'đź‘Ť Vote YES'}
+                            {loading === 'vote-' + p.id ? <span className="loading"></span> : tr('Vote YES', '\u6295\u8d5e\u6210')}
                           </button>
                           <button className="btn btn-danger" style={{ fontSize: '0.85rem', padding: '0.4rem 1rem' }}
                             onClick={() => handleVote(p.id, false)} disabled={loading === 'vote-' + p.id}>
-                            {loading === 'vote-' + p.id ? <span className="loading"></span> : 'đź‘Ž Vote NO'}
+                            {loading === 'vote-' + p.id ? <span className="loading"></span> : tr('Vote NO', '\u6295\u53cd\u5bf9')}
                           </button>
                         </>
                       )}
                       {isEnded && !p.isFinalized && isAdmin && (
                         <button className="btn btn-primary" style={{ fontSize: '0.85rem', padding: '0.4rem 1rem' }}
                           onClick={() => handleFinalize(p.id)} disabled={loading === 'finalize-' + p.id}>
-                          {loading === 'finalize-' + p.id ? <span className="loading"></span> : 'đź”“ Finalize'}
+                          {loading === 'finalize-' + p.id ? <span className="loading"></span> : tr('Finalize', '\u5b8c\u6210\u7ed3\u7b97')}
                         </button>
                       )}
                       {(p.isFinalized || isAdmin) && (
                         <button className="btn btn-outline" style={{ fontSize: '0.85rem', padding: '0.4rem 1rem' }}
                           onClick={() => handleDecryptVoteCounts(p.id)} disabled={loading === 'decrypt-' + p.id}>
-                          {loading === 'decrypt-' + p.id ? <span className="loading"></span> : 'đź”“ Decrypt Results'}
+                          {loading === 'decrypt-' + p.id ? <span className="loading"></span> : tr('Decrypt Results', '\u89e3\u5bc6\u7ed3\u679c')}
                         </button>
                       )}
                     </div>
@@ -1700,17 +1767,17 @@ function App() {
 
             {/* Share governance contract */}
             <div className="card" style={{ borderColor: 'var(--accent)' }}>
-              <h2>Share with Board Members</h2>
+              <h2>{tr('Share with Board Members', '\u5206\u4eab\u7ed9\u8463\u4e8b\u6210\u5458')}</h2>
               <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
-                Share this governance contract address with board members.
+                {tr('Share this governance contract address with board members.', '\u628a\u8fd9\u4e2a\u6cbb\u7406\u5408\u7ea6\u5730\u5740\u5206\u4eab\u7ed9\u8463\u4e8b\u6210\u5458\u3002')}
               </p>
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                 <code style={{ flex: 1, padding: '0.6rem', background: 'var(--bg)', borderRadius: '6px', fontSize: '0.85rem', wordBreak: 'break-all' }}>
                   {govContractAddress}
                 </code>
                 <button className="btn btn-outline" style={{ padding: '0.5rem 0.75rem', whiteSpace: 'nowrap' }}
-                  onClick={() => { navigator.clipboard.writeText(govContractAddress); showToast('Copied!', 'success') }}>
-                  Copy
+                  onClick={() => { navigator.clipboard.writeText(govContractAddress); showToast(tr('Copied!', '\u5df2\u590d\u5236\uff01'), 'success') }}>
+                  {tr('Copy', '\u590d\u5236')}
                 </button>
               </div>
             </div>
@@ -1722,7 +1789,7 @@ function App() {
       {activeTab === 'compliance' && <>
         {!contractAddress ? (
           <div className="card" style={{ textAlign: 'center', padding: '2rem' }}>
-            <p style={{ color: 'var(--text-dim)' }}>Connect to a payroll contract first (Payroll tab â†’ Setup)</p>
+            <p style={{ color: 'var(--text-dim)' }}>{tr('Connect to a payroll contract first (Payroll tab \u2192 Setup)', '\u8bf7\u5148\u8fde\u63a5\u4e00\u4e2a\u85aa\u8d44\u5408\u7ea6\uff08\u5728\u201c\u85aa\u8d44\u201d tab \u4e2d\u8fdb\u5165\u8bbe\u7f6e\uff09')}</p>
           </div>
         ) : (
           <>
@@ -1730,41 +1797,40 @@ function App() {
             {isEmployer && (
               <>
               <div className="card card-highlight">
-                <h2>Compliance Policy</h2>
+                <h2>{tr('Compliance Policy', '\u5408\u89c4\u7b56\u7565')}</h2>
                 <p className="card-copy">
-                  Zama already secures encrypted payroll inputs with input proofs on Sepolia. The policy below adds an optional business layer:
-                  KYC approval and ZK/KYC attestation commitments for employer and employee actions.
+                  {tr('Zama already secures encrypted payroll inputs with input proofs on Sepolia. The policy below adds an optional business layer: KYC approval and ZK/KYC attestation commitments for employer and employee actions.', 'Zama \u5df2\u5728 Sepolia \u4e0a\u7528 input proofs \u4fdd\u62a4\u52a0\u5bc6\u85aa\u8d44\u8f93\u5165\u3002\u4e0b\u9762\u7684\u7b56\u7565\u518d\u53e0\u52a0\u4e00\u5c42\u53ef\u9009\u7684\u4e1a\u52a1\u5408\u89c4\u89c4\u5219\uff1a\u5bf9\u96c7\u4e3b\u548c\u5458\u5de5\u884c\u4e3a\u589e\u52a0 KYC \u5ba1\u6279\u4e0e ZK/KYC \u627f\u8bfa\u6821\u9a8c\u3002')}
                 </p>
                 {!advancedComplianceSupported ? (
                   <div className="info-row">
-                    <span className="info-label">Advanced policy support</span>
-                    <span className="info-value">Deploy the latest payroll contract to use optional KYC / attestation gating</span>
+                    <span className="info-label">{tr('Advanced policy support', '\u9ad8\u7ea7\u7b56\u7565\u652f\u6301')}</span>
+                    <span className="info-value">{tr('Deploy the latest payroll contract to use optional KYC / attestation gating', '\u8bf7\u90e8\u7f72\u6700\u65b0\u7248\u85aa\u8d44\u5408\u7ea6\uff0c\u4ee5\u542f\u7528\u53ef\u9009 KYC / \u8bc1\u660e\u95e8\u63a7')}</span>
                   </div>
                 ) : (
                   <>
                     <div className="toggle-grid">
                       <label className="toggle-row">
                         <input type="checkbox" checked={compliancePolicy.employerKyc} onChange={e => setCompliancePolicy(prev => ({ ...prev, employerKyc: e.target.checked }))} />
-                        <span>Require employer KYC before regulated actions</span>
+                        <span>{tr('Require employer KYC before regulated actions', '\u76d1\u7ba1\u64cd\u4f5c\u524d\u9700\u96c7\u4e3b KYC')}</span>
                       </label>
                       <label className="toggle-row">
                         <input type="checkbox" checked={compliancePolicy.employeeKyc} onChange={e => setCompliancePolicy(prev => ({ ...prev, employeeKyc: e.target.checked }))} />
-                        <span>Require employee KYC before onboarding and payroll access</span>
+                        <span>{tr('Require employee KYC before onboarding and payroll access', '\u5458\u5de5\u5165\u804c\u548c\u8bbf\u95ee\u85aa\u8d44\u524d\u9700\u901a\u8fc7 KYC')}</span>
                       </label>
                       <label className="toggle-row">
                         <input type="checkbox" checked={compliancePolicy.employerZk} onChange={e => setCompliancePolicy(prev => ({ ...prev, employerZk: e.target.checked }))} />
-                        <span>Require employer attestation commitment</span>
+                        <span>{tr('Require employer attestation commitment', '\u9700\u96c7\u4e3b\u63d0\u4ea4\u8bc1\u660e\u627f\u8bfa')}</span>
                       </label>
                       <label className="toggle-row">
                         <input type="checkbox" checked={compliancePolicy.employeeZk} onChange={e => setCompliancePolicy(prev => ({ ...prev, employeeZk: e.target.checked }))} />
-                        <span>Require employee attestation commitment</span>
+                        <span>{tr('Require employee attestation commitment', '\u9700\u5458\u5de5\u63d0\u4ea4\u8bc1\u660e\u627f\u8bfa')}</span>
                       </label>
                     </div>
                     <div className="actions">
-                      <button className="btn btn-outline" onClick={() => setCompliancePolicy(DEFAULT_COMPLIANCE_POLICY)}>Open Mode Preset</button>
-                      <button className="btn btn-outline" onClick={() => setCompliancePolicy({ employerKyc: true, employeeKyc: true, employerZk: true, employeeZk: true })}>Regulated Mode Preset</button>
+                      <button className="btn btn-outline" onClick={() => setCompliancePolicy(DEFAULT_COMPLIANCE_POLICY)}>{tr('Open Mode Preset', '\u5f00\u653e\u6a21\u5f0f\u9884\u8bbe')}</button>
+                      <button className="btn btn-outline" onClick={() => setCompliancePolicy({ employerKyc: true, employeeKyc: true, employerZk: true, employeeZk: true })}>{tr('Regulated Mode Preset', '\u76d1\u7ba1\u6a21\u5f0f\u9884\u8bbe')}</button>
                       <button className="btn btn-primary" onClick={handleApplyCompliancePolicy} disabled={loading === 'setPolicy'}>
-                        {loading === 'setPolicy' ? <><span className="loading"></span>Applying...</> : 'Apply Policy'}
+                        {loading === 'setPolicy' ? <><span className="loading"></span>{tr('Applying...', '\u5e94\u7528\u4e2d\u2026')}</> : tr('Apply Policy', '\u5e94\u7528\u7b56\u7565')}
                       </button>
                     </div>
                   </>
@@ -1772,94 +1838,94 @@ function App() {
                 {myComplianceRecord && (
                   <div className="policy-record">
                     <div>
-                      <span className="summary-label">Current wallet compliance</span>
-                      <strong className="summary-value">{myComplianceRecord.approved ? 'Approved' : 'Not approved'}</strong>
+                      <span className="summary-label">{tr('Current wallet compliance', '\u5f53\u524d\u94b1\u5305\u5408\u89c4\u72b6\u6001')}</span>
+                      <strong className="summary-value">{myComplianceRecord.approved ? tr('Approved', '\u5df2\u901a\u8fc7') : tr('Not approved', '\u672a\u901a\u8fc7')}</strong>
                     </div>
                     <div>
-                      <span className="summary-label">KYC commitment</span>
-                      <strong className="mono-value">{myComplianceRecord.kycHash === ethers.ZeroHash ? 'Not set' : shortAddr(myComplianceRecord.kycHash)}</strong>
+                      <span className="summary-label">{tr('KYC commitment', 'KYC \u627f\u8bfa')}</span>
+                      <strong className="mono-value">{myComplianceRecord.kycHash === ethers.ZeroHash ? tr('Not set', '\u672a\u8bbe\u7f6e') : shortAddr(myComplianceRecord.kycHash)}</strong>
                     </div>
                     <div>
-                      <span className="summary-label">Attestation</span>
-                      <strong className="mono-value">{myComplianceRecord.zkHash === ethers.ZeroHash ? 'Not set' : shortAddr(myComplianceRecord.zkHash)}</strong>
+                      <span className="summary-label">{tr('Attestation', '\u8bc1\u660e')}</span>
+                      <strong className="mono-value">{myComplianceRecord.zkHash === ethers.ZeroHash ? tr('Not set', '\u672a\u8bbe\u7f6e') : shortAddr(myComplianceRecord.zkHash)}</strong>
                     </div>
                   </div>
                 )}
               </div>
 
               <div className="card">
-                <h2>KYC / Attestation Registry</h2>
+                <h2>{tr('KYC / Attestation Registry', 'KYC / \u8bc1\u660e\u767b\u8bb0')}</h2>
                 <p className="card-copy">
-                  Store only commitments onchain. You can paste a bytes32 digest directly, or enter a plain reference string and the UI will hash it before submission.
+                  {tr('Store only commitments onchain. You can paste a bytes32 digest directly, or enter a plain reference string and the UI will hash it before submission.', '\u94fe\u4e0a\u4ec5\u5b58\u50a8\u627f\u8bfa\u503c\u3002\u60a8\u53ef\u4ee5\u76f4\u63a5\u7c98\u8d34 bytes32 \u6458\u8981\uff0c\u6216\u8f93\u5165\u666e\u901a\u5f15\u7528\u5b57\u7b26\u4e32\uff0cUI \u4f1a\u5728\u63d0\u4ea4\u524d\u81ea\u52a8 hash\u3002')}
                 </p>
                 <div className="input-group">
-                  <label>Subject Address</label>
+                  <label>{tr('Subject Address', '\u76ee\u6807\u5730\u5740')}</label>
                   <input type="text" placeholder="0x..." value={complianceSubject} onChange={e => setComplianceSubject(e.target.value)} />
                 </div>
                 <div className="toggle-grid toggle-grid--compact">
                   <label className="toggle-row">
                     <input type="checkbox" checked={complianceApproved} onChange={e => setComplianceApproved(e.target.checked)} />
-                    <span>Mark subject as KYC approved</span>
+                    <span>{tr('Mark subject as KYC approved', '\u5c06\u8be5\u4e3b\u4f53\u6807\u8bb0\u4e3a KYC \u5df2\u901a\u8fc7')}</span>
                   </label>
                 </div>
                 <div className="input-group">
-                  <label>KYC Commitment or Reference</label>
-                  <input type="text" placeholder="passport-hash / bytes32 / ref-id" value={kycReference} onChange={e => setKycReference(e.target.value)} />
+                  <label>{tr('KYC Commitment or Reference', 'KYC \u627f\u8bfa\u6216\u5f15\u7528')}</label>
+                  <input type="text" placeholder={tr('passport-hash / bytes32 / ref-id', 'passport-hash / bytes32 / ref-id')} value={kycReference} onChange={e => setKycReference(e.target.value)} />
                 </div>
                 <div className="input-group">
-                  <label>ZK / Attestation Commitment or Reference</label>
-                  <input type="text" placeholder="zk-proof-digest / attestation-id / bytes32" value={zkReference} onChange={e => setZkReference(e.target.value)} />
+                  <label>{tr('ZK / Attestation Commitment or Reference', 'ZK / \u8bc1\u660e\u627f\u8bfa\u6216\u5f15\u7528')}</label>
+                  <input type="text" placeholder={tr('zk-proof-digest / attestation-id / bytes32', 'zk-proof-digest / attestation-id / bytes32')} value={zkReference} onChange={e => setZkReference(e.target.value)} />
                 </div>
                 <div className="actions">
-                  <button className="btn btn-outline" onClick={() => { setComplianceSubject(account); setComplianceApproved(true) }}>Use My Wallet</button>
+                  <button className="btn btn-outline" onClick={() => { setComplianceSubject(account); setComplianceApproved(true) }}>{tr('Use My Wallet', '\u4f7f\u7528\u6211\u7684\u94b1\u5305')}</button>
                   <button className="btn btn-primary" onClick={() => handleSaveComplianceRecord()} disabled={loading === 'setComplianceRecord'}>
-                    {loading === 'setComplianceRecord' ? <><span className="loading"></span>Saving...</> : 'Save Compliance Record'}
+                    {loading === 'setComplianceRecord' ? <><span className="loading"></span>{tr('Saving...', '\u4fdd\u5b58\u4e2d\u2026')}</> : tr('Save Compliance Record', '\u4fdd\u5b58\u5408\u89c4\u8bb0\u5f55')}
                   </button>
                 </div>
               </div>
 
               <div className="card">
-                <h2>Role Management</h2>
+                <h2>{tr('Role Management', '\u89d2\u8272\u7ba1\u7406')}</h2>
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-                  <input type="text" placeholder="Auditor address 0x..." value={auditorAddr}
+                  <input type="text" placeholder={tr('Auditor address 0x...', '\u5ba1\u8ba1\u5458\u5730\u5740 0x...')} value={auditorAddr}
                     onChange={e => setAuditorAddr(e.target.value)}
                     style={{ flex: 1, padding: '0.6rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)' }} />
                   <button className="btn btn-primary" onClick={handleAddAuditor} disabled={loading === 'addAuditor'}>
-                    {loading === 'addAuditor' ? <span className="loading"></span> : '+ Auditor'}
+                    {loading === 'addAuditor' ? <span className="loading"></span> : tr('+ Auditor', '+ \u5ba1\u8ba1\u5458')}
                   </button>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-                  <input type="text" placeholder="Tax authority address 0x..." value={taxAuthAddr}
+                  <input type="text" placeholder={tr('Tax authority address 0x...', '\u7a0e\u52a1\u673a\u5173\u5730\u5740 0x...')} value={taxAuthAddr}
                     onChange={e => setTaxAuthAddr(e.target.value)}
                     style={{ flex: 1, padding: '0.6rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)' }} />
                   <button className="btn btn-primary" onClick={handleAddTaxAuthority} disabled={loading === 'addTax'}>
-                    {loading === 'addTax' ? <span className="loading"></span> : '+ Tax Auth'}
+                    {loading === 'addTax' ? <span className="loading"></span> : tr('+ Tax Authority', '+ \u7a0e\u52a1\u673a\u5173')}
                   </button>
                 </div>
                 <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '1rem 0' }} />
-                <h3 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>Minimum Wage</h3>
+                <h3 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>{tr('Minimum Wage', '\u6700\u4f4e\u5de5\u8d44')}</h3>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <input type="number" placeholder="Set minimum wage" value={minWageInput}
+                  <input type="number" placeholder={tr('Set minimum wage', '\u8bbe\u7f6e\u6700\u4f4e\u5de5\u8d44')} value={minWageInput}
                     onChange={e => setMinWageInput(e.target.value)}
                     style={{ flex: 1, padding: '0.6rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)' }} />
                   <button className="btn btn-primary" onClick={handleSetMinWage} disabled={loading === 'setMinWage'}>
-                    {loading === 'setMinWage' ? <span className="loading"></span> : 'Set'}
+                    {loading === 'setMinWage' ? <span className="loading"></span> : tr('Set', '\u8bbe\u7f6e')}
                   </button>
                 </div>
                 <div className="summary-grid summary-grid--mini" style={{ marginTop: '1rem' }}>
                   <article className="summary-card">
-                    <span className="summary-label">Minimum wage</span>
-                    <strong className="summary-value">{minimumWageValue || 'Not set'}</strong>
+                    <span className="summary-label">{tr('Minimum wage', '\u6700\u4f4e\u5de5\u8d44')}</span>
+                    <strong className="summary-value">{minimumWageValue || tr('Not set', '\u672a\u8bbe\u7f6e')}</strong>
                   </article>
                   <article className="summary-card">
-                    <span className="summary-label">Auditors</span>
+                    <span className="summary-label">{tr('Auditors', '\u5ba1\u8ba1\u5458')}</span>
                     <strong className="summary-value">{auditors.length}</strong>
-                    <p>{auditors.length ? auditors.map(shortAddr).join(', ') : 'No auditors assigned'}</p>
+                    <p>{auditors.length ? auditors.map(shortAddr).join(', ') : tr('No auditors assigned', '\u6682\u65e0\u5ba1\u8ba1\u5458')}</p>
                   </article>
                   <article className="summary-card">
-                    <span className="summary-label">Tax authorities</span>
+                    <span className="summary-label">{tr('Tax authorities', '\u7a0e\u52a1\u673a\u5173')}</span>
                     <strong className="summary-value">{taxAuthorities.length}</strong>
-                    <p>{taxAuthorities.length ? taxAuthorities.map(shortAddr).join(', ') : 'No tax authorities assigned'}</p>
+                    <p>{taxAuthorities.length ? taxAuthorities.map(shortAddr).join(', ') : tr('No tax authorities assigned', '\u6682\u65e0\u7a0e\u52a1\u673a\u5173')}</p>
                   </article>
                 </div>
               </div>
@@ -1869,19 +1935,19 @@ function App() {
             {/* Auditor Panel */}
             {isAuditor && (
               <div className="card">
-                <h2>Auditor Panel</h2>
+                <h2>{tr('Auditor Panel', '\u5ba1\u8ba1\u9762\u677f')}</h2>
                 <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '1rem' }}>
-                  As an auditor, you can view encrypted aggregates and check solvency without seeing individual salaries.
+                  {tr('As an auditor, you can view encrypted aggregates and check solvency without seeing individual salaries.', '\u4f5c\u4e3a\u5ba1\u8ba1\u5458\uff0c\u60a8\u53ef\u4ee5\u67e5\u770b\u52a0\u5bc6\u6c47\u603b\u6570\u636e\uff0c\u5e76\u5728\u4e0d\u66b4\u9732\u4e2a\u4eba\u85aa\u8d44\u7684\u60c5\u51b5\u4e0b\u68c0\u67e5\u507f\u4ed8\u80fd\u529b\u3002')}
                 </p>
                 <div className="actions">
                   <button className="btn btn-primary" onClick={handleDecryptTotalExpense} disabled={loading === 'decryptExpense'}>
-                    {loading === 'decryptExpense' ? <><span className="loading"></span>Decrypting...</> : 'đź’° Decrypt Total Expense'}
+                    {loading === 'decryptExpense' ? <><span className="loading"></span>{tr('Decrypting...', '\u89e3\u5bc6\u4e2d\u2026')}</> : tr('Decrypt Total Expense', '\u89e3\u5bc6\u603b\u652f\u51fa')}
                   </button>
                   <button className="btn btn-outline" onClick={handleSolvencyCheck} disabled={loading === 'solvency'}>
-                    {loading === 'solvency' ? <><span className="loading"></span>Checking...</> : 'đźŹ¦ Run Solvency Check'}
+                    {loading === 'solvency' ? <><span className="loading"></span>{tr('Checking...', '\u68c0\u67e5\u4e2d\u2026')}</> : tr('Run Solvency Check', '\u6267\u884c\u507f\u4ed8\u68c0\u67e5')}
                   </button>
                   <button className="btn btn-success" onClick={handleDecryptSolvency} disabled={loading === 'decryptSolvency'}>
-                    {loading === 'decryptSolvency' ? <><span className="loading"></span>Decrypting...</> : 'đź”“ Decrypt Solvency'}
+                    {loading === 'decryptSolvency' ? <><span className="loading"></span>{tr('Decrypting...', '\u89e3\u5bc6\u4e2d\u2026')}</> : tr('Decrypt Solvency', '\u89e3\u5bc6\u507f\u4ed8\u7ed3\u679c')}
                   </button>
                 </div>
               </div>
@@ -1890,30 +1956,30 @@ function App() {
             {/* Tax Authority Panel */}
             {isTaxAuthority && (
               <div className="card">
-                <h2>Tax Authority Panel</h2>
+                <h2>{tr('Tax Authority Panel', '\u7a0e\u52a1\u673a\u5173\u9762\u677f')}</h2>
                 <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '1rem' }}>
-                  Verify minimum wage compliance and view aggregate payroll data â€” no individual salaries exposed.
+                  {tr('Verify minimum wage compliance and view aggregate payroll data \u2014 no individual salaries exposed.', '\u9a8c\u8bc1\u6700\u4f4e\u5de5\u8d44\u5408\u89c4\u6027\uff0c\u5e76\u67e5\u770b\u6c47\u603b\u85aa\u8d44\u6570\u636e\uff0c\u4e0d\u4f1a\u66b4\u9732\u4efb\u4f55\u4e2a\u4eba\u85aa\u8d44\u3002')}
                 </p>
                 <div className="actions" style={{ marginBottom: '1rem' }}>
                   <button className="btn btn-primary" onClick={handleDecryptTotalExpense} disabled={loading === 'decryptExpense'}>
-                    {loading === 'decryptExpense' ? <><span className="loading"></span>Decrypting...</> : 'đź’° Decrypt Total Expense'}
+                    {loading === 'decryptExpense' ? <><span className="loading"></span>{tr('Decrypting...', '\u89e3\u5bc6\u4e2d\u2026')}</> : tr('Decrypt Total Expense', '\u89e3\u5bc6\u603b\u652f\u51fa')}
                   </button>
                   <button className="btn btn-outline" onClick={() => handleVerifyMinWage()} disabled={loading === 'verifyMinWage'}>
-                    {loading === 'verifyMinWage' ? <><span className="loading"></span>Checking...</> : 'âś… Verify All Min Wage'}
+                    {loading === 'verifyMinWage' ? <><span className="loading"></span>{tr('Checking...', '\u68c0\u67e5\u4e2d\u2026')}</> : tr('Verify All Min Wage', '\u6821\u9a8c\u5168\u90e8\u6700\u4f4e\u5de5\u8d44')}
                   </button>
                   <button className="btn btn-success" onClick={handleDecryptAllMinWage} disabled={loading === 'decryptAllMinWage'}>
-                    {loading === 'decryptAllMinWage' ? <><span className="loading"></span>Decrypting...</> : 'đź”“ Decrypt Batch Result'}
+                    {loading === 'decryptAllMinWage' ? <><span className="loading"></span>{tr('Decrypting...', '\u89e3\u5bc6\u4e2d\u2026')}</> : tr('Decrypt Batch Result', '\u89e3\u5bc6\u6279\u91cf\u7ed3\u679c')}
                   </button>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <input type="text" placeholder="Employee address for individual check" value={minWageCheckAddr}
+                  <input type="text" placeholder={tr('Employee address for individual check', '\u5355\u4e2a\u68c0\u67e5\u7684\u5458\u5de5\u5730\u5740')} value={minWageCheckAddr}
                     onChange={e => setMinWageCheckAddr(e.target.value)}
                     style={{ flex: 1, padding: '0.6rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)' }} />
                   <button className="btn btn-outline" onClick={() => handleVerifyMinWage(minWageCheckAddr)} disabled={loading === 'verifyMinWage'}>
-                    Check Individual
+                    {tr('Check Individual', '\u68c0\u67e5\u5355\u4eba')}
                   </button>
                   <button className="btn btn-success" onClick={handleDecryptMinWageResult} disabled={loading === 'decryptMinWage'}>
-                    {loading === 'decryptMinWage' ? <><span className="loading"></span>Decrypting...</> : 'Decrypt Result'}
+                    {loading === 'decryptMinWage' ? <><span className="loading"></span>{tr('Decrypting...', '\u89e3\u5bc6\u4e2d\u2026')}</> : tr('Decrypt Result', '\u89e3\u5bc6\u7ed3\u679c')}
                   </button>
                 </div>
               </div>
@@ -1922,10 +1988,10 @@ function App() {
             {/* No compliance role */}
             {!isEmployer && !isAuditor && !isTaxAuthority && (
               <div className="card" style={{ textAlign: 'center', padding: '2rem' }}>
-                <div className="lock-icon">đź”’</div>
-                <h2 style={{ justifyContent: 'center' }}>No Compliance Access</h2>
+                <div className="lock-icon">LOCK</div>
+                <h2 style={{ justifyContent: 'center' }}>{tr('No Compliance Access', '\u65e0\u5408\u89c4\u8bbf\u95ee\u6743\u9650')}</h2>
                 <p style={{ color: 'var(--text-dim)' }}>
-                  Your address is not registered as an employer, auditor, or tax authority for this contract.
+                  {tr('Your address is not registered as an employer, auditor, or tax authority for this contract.', '\u60a8\u7684\u5730\u5740\u6ca1\u6709\u88ab\u767b\u8bb0\u4e3a\u8be5\u5408\u7ea6\u7684\u96c7\u4e3b\u3001\u5ba1\u8ba1\u5458\u6216\u7a0e\u52a1\u673a\u5173\u3002')}
                 </p>
               </div>
             )}
