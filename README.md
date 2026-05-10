@@ -37,7 +37,8 @@ Built on the [FHEVM Hardhat Template](https://docs.zama.ai/protocol/solidity-gui
 | **Encrypted Salaries** | Salary amounts stored as `euint64` — fully homomorphic encrypted |
 | **Access Control** | Only employer + individual employee can decrypt each salary |
 | **Batch Payroll** | One transaction pays all employees simultaneously |
-| **Zero-Knowledge Treasury** | Treasury balance is also encrypted |
+| **Private Governance** | Board votes stay encrypted with the same FHE runtime |
+| **Optional Compliance Mode** | Employers can require KYC flags and attestation commitments before payroll actions |
 | **On-chain Privacy** | No salary data leaks to blockchain explorers or other employees |
 
 ## 🚀 Quick Start
@@ -86,7 +87,121 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173 and update `CONTRACT_ADDRESS` in `frontend/src/App.tsx` with your deployed address.
+Then create `frontend/.env` from `frontend/.env.example` and point it at your deployed contracts:
+
+```bash
+VITE_PAYROLL_CONTRACT_ADDRESS=0xYourPayrollAddress
+VITE_GOV_CONTRACT_ADDRESS=0xYourGovernanceAddress
+```
+
+Open http://localhost:5173 with MetaMask or Rabby on the same network as the deployed contracts.
+
+## 🌐 Connect to Sepolia + Zama testnet
+
+This app does **not** require a special Zama wallet. You use a normal EVM wallet on **Ethereum Sepolia**, and the app talks to Zama's FHE relayer and gateway behind the scenes.
+
+### 1. Prepare an EVM wallet
+
+- Install MetaMask or Rabby.
+- Create a wallet or use an existing one.
+- Switch the wallet network to **Ethereum Sepolia**.
+- Get some Sepolia ETH from a faucet so you can deploy and send test transactions.
+
+### 2. Get an Infura RPC key
+
+`INFURA_API_KEY` is your RPC project key. Hardhat uses it to send transactions to the Sepolia network through Infura.
+
+How to get it:
+
+1. Create an account on Infura.
+2. Create a new project.
+3. Enable the Ethereum Sepolia endpoint.
+4. Copy the project API key.
+
+### 3. Choose how Hardhat signs transactions
+
+You only need **one** of these:
+
+- `PRIVATE_KEY`: The raw private key for one wallet account. Best for deployment because it is explicit and limited to one address.
+- `MNEMONIC`: The 12 or 24 word seed phrase for a wallet. Hardhat can derive many accounts from it, so it is broader and riskier.
+
+Recommendation: use `PRIVATE_KEY` for deployment and keep `MNEMONIC` as a fallback only if you understand wallet derivation.
+
+### 4. Store network credentials in Hardhat
+
+```bash
+npx hardhat vars set INFURA_API_KEY
+npx hardhat vars set PRIVATE_KEY
+```
+
+Optional, if you want contract verification later:
+
+```bash
+npx hardhat vars set ETHERSCAN_API_KEY
+```
+
+### 5. Deploy to Sepolia
+
+```bash
+npm run deploy:sepolia
+```
+
+The deploy script prints three addresses:
+
+- `FHECounter`
+- `ConfidentialPayroll`
+- `ConfidentialGovernance`
+
+### 6. Point the frontend at the deployed contracts
+
+Create `frontend/.env`:
+
+```bash
+VITE_PAYROLL_CONTRACT_ADDRESS=0x...
+VITE_GOV_CONTRACT_ADDRESS=0x...
+```
+
+Then run:
+
+```bash
+cd frontend
+npm run dev
+```
+
+When the browser wallet is connected to Sepolia, the frontend uses the Zama relayer SDK to encrypt inputs in the browser and request user decryption when needed.
+
+## 🔑 What these secrets actually are
+
+### `INFURA_API_KEY`
+
+- Not a wallet secret.
+- It is an RPC access key.
+- Think of it as your authenticated network gateway to Sepolia.
+
+### `PRIVATE_KEY`
+
+- The secret that controls one blockchain account.
+- Anyone with it can move that account's funds and sign deployments.
+- Export it from the specific wallet account you want Hardhat to use.
+
+### `MNEMONIC`
+
+- The wallet seed phrase.
+- It can recreate many accounts, not just one.
+- More convenient for HD wallets, but much more sensitive than a single private key.
+
+Never commit any of these values to Git.
+
+## 🧠 What is different about Zama vs a normal public chain?
+
+Zama here is not replacing Ethereum consensus. The base chain is still **Ethereum Sepolia**. What changes is the computation model.
+
+- Normal public smart contracts: contract state and inputs are visible in plaintext.
+- Zama FHE contracts: sensitive inputs are encrypted before they reach the contract, and the contract computes on ciphertext.
+- Normal privacy patterns: often prove something off-chain with ZK, then publish a proof on-chain.
+- Zama FHE pattern: keep the data encrypted throughout the contract lifecycle and only decrypt to authorized users.
+
+For this payroll app, that means the chain still gives you public ordering, settlement, and composability, while Zama adds a confidentiality layer for salaries, treasury balances, governance votes, and compliance checks.
 
 ## 📖 Contract API
 
@@ -130,24 +245,9 @@ Who can decrypt:
 
 ```bash
 npx hardhat test
-
-# Output:
-  ConfidentialPayroll
-    ✓ deploys with correct employer and company name
-    ✓ employer can add an employee
-    ✓ cannot add same employee twice
-    ✓ employer can update salary
-    ✓ employer can remove an employee
-    ✓ employer can deposit to treasury
-    ✓ full payroll cycle: deposit → add → pay → check balances
-    ✓ non-employee cannot view salary
-    ✓ non-employee cannot view balance
-    ✓ non-employer cannot execute payroll
-    ✓ non-employer cannot deposit
-    ✓ supports multiple pay cycles with accumulating balances
-    ✓ employee can withdraw and balance resets
-    14 passing
 ```
+
+Current coverage includes payroll flow, confidential governance, and optional compliance gating for KYC and attestation commitments.
 
 ## 🛠 CLI Tasks
 
@@ -197,8 +297,8 @@ confidential-payroll/
 ## 🌐 Deploy to Sepolia
 
 ```bash
-npx hardhat vars set MNEMONIC
 npx hardhat vars set INFURA_API_KEY
+npx hardhat vars set PRIVATE_KEY
 npx hardhat deploy --network sepolia
 ```
 

@@ -5,10 +5,13 @@ import { BYTECODE } from './bytecode'
 import GOV_ABI from './governance-abi.json'
 import { GOVERNANCE_BYTECODE } from './governance-bytecode'
 import { useFhevm } from './useFhevm'
+import { SepoliaConfig } from '@zama-fhe/relayer-sdk/web'
 
 // localStorage keys
 const LS_CONTRACT_KEY = 'cpayroll_contract_v1'
 const LS_GOV_CONTRACT_KEY = 'cgov_contract_v1'
+const DEFAULT_PAYROLL_CONTRACT = import.meta.env.VITE_PAYROLL_CONTRACT_ADDRESS || ''
+const DEFAULT_GOV_CONTRACT = import.meta.env.VITE_GOV_CONTRACT_ADDRESS || ''
 
 // Zama fhEVM runs on Sepolia
 const ZAMA_NETWORK = {
@@ -51,6 +54,50 @@ type WalletOption = {
   description: string
 }
 
+type CompliancePolicy = {
+  employerKyc: boolean
+  employeeKyc: boolean
+  employerZk: boolean
+  employeeZk: boolean
+}
+
+type ComplianceRecord = {
+  approved: boolean
+  kycHash: string
+  zkHash: string
+}
+
+const DEFAULT_COMPLIANCE_POLICY: CompliancePolicy = {
+  employerKyc: false,
+  employeeKyc: false,
+  employerZk: false,
+  employeeZk: false,
+}
+
+const PAYROLL_EXTRA_ABI = [
+  'function configureCompliancePolicy(bool,bool,bool,bool)',
+  'function setComplianceRecord(address,bool,bytes32,bytes32)',
+  'function getComplianceRecord(address) view returns (bool approved, bytes32 kycHash, bytes32 zkHash)',
+  'function requireEmployerKyc() view returns (bool)',
+  'function requireEmployeeKyc() view returns (bool)',
+  'function requireEmployerZkAttestation() view returns (bool)',
+  'function requireEmployeeZkAttestation() view returns (bool)',
+  'function getAuditors() view returns (address[])',
+  'function getTaxAuthorities() view returns (address[])',
+  'function minimumWage() view returns (uint64)',
+] as const
+
+const PAYROLL_ABI = [...(ABI as unknown as readonly unknown[]), ...PAYROLL_EXTRA_ABI]
+
+const TESTNET_RUNTIME = {
+  hostChainId: 11155111,
+  gatewayChainId: SepoliaConfig.gatewayChainId,
+  relayerUrl: SepoliaConfig.relayerUrl,
+  aclContractAddress: SepoliaConfig.aclContractAddress,
+  inputVerifierContractAddress: SepoliaConfig.inputVerifierContractAddress,
+  kmsContractAddress: SepoliaConfig.kmsContractAddress,
+}
+
 function detectWallets(): WalletOption[] {
   const w = window as unknown as {
     ethereum?: EIP1193Provider
@@ -88,7 +135,7 @@ function App() {
   const [account, setAccount] = useState<string | null>(null)
   const [provider, setProvider] = useState<ethers.BrowserProvider | null>(null)
   const [contract, setContract] = useState<ethers.Contract | null>(null)
-  const [contractAddress, setContractAddress] = useState<string>(() => localStorage.getItem(LS_CONTRACT_KEY) || '')
+  const [contractAddress, setContractAddress] = useState<string>(() => localStorage.getItem(LS_CONTRACT_KEY) || DEFAULT_PAYROLL_CONTRACT)
   const [isEmployer, setIsEmployer] = useState(false)
   const [isEmployee, setIsEmployee] = useState(false)
   const [companyName, setCompanyName] = useState('')
@@ -106,7 +153,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<'payroll' | 'governance' | 'compliance'>('payroll')
 
   // Governance state
-  const [govContractAddress, setGovContractAddress] = useState<string>(() => localStorage.getItem(LS_GOV_CONTRACT_KEY) || '')
+  const [govContractAddress, setGovContractAddress] = useState<string>(() => localStorage.getItem(LS_GOV_CONTRACT_KEY) || DEFAULT_GOV_CONTRACT)
   const [govContract, setGovContract] = useState<ethers.Contract | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [isBoardMember, setIsBoardMember] = useState(false)
@@ -122,10 +169,20 @@ function App() {
   // Compliance state
   const [isAuditor, setIsAuditor] = useState(false)
   const [isTaxAuthority, setIsTaxAuthority] = useState(false)
+  const [advancedComplianceSupported, setAdvancedComplianceSupported] = useState(false)
+  const [compliancePolicy, setCompliancePolicy] = useState<CompliancePolicy>(DEFAULT_COMPLIANCE_POLICY)
+  const [myComplianceRecord, setMyComplianceRecord] = useState<ComplianceRecord | null>(null)
+  const [auditors, setAuditors] = useState<string[]>([])
+  const [taxAuthorities, setTaxAuthorities] = useState<string[]>([])
+  const [minimumWageValue, setMinimumWageValue] = useState(0)
   const [auditorAddr, setAuditorAddr] = useState('')
   const [taxAuthAddr, setTaxAuthAddr] = useState('')
   const [minWageInput, setMinWageInput] = useState('')
   const [minWageCheckAddr, setMinWageCheckAddr] = useState('')
+  const [complianceSubject, setComplianceSubject] = useState('')
+  const [complianceApproved, setComplianceApproved] = useState(true)
+  const [kycReference, setKycReference] = useState('')
+  const [zkReference, setZkReference] = useState('')
 
   // Setup flow state
   const [showSetup, setShowSetup] = useState(false)
@@ -298,7 +355,7 @@ function App() {
     if (!provider || !account || !contractAddress) return
     try {
       const signer = await provider.getSigner()
-      const c = new ethers.Contract(contractAddress, ABI, signer)
+      const c = new ethers.Contract(contractAddress, PAYROLL_ABI, signer)
       setContract(c)
       const [name, employer, empList, cycles] = await Promise.all([
         c.companyName(),
@@ -366,7 +423,53 @@ function App() {
       ])
       setIsAuditor(auditor)
       setIsTaxAuthority(tax)
-    } catch { /* contract may not have these functions */ }
+      try {
+        const [
+          employerKyc,
+          employeeKyc,
+          employerZk,
+          employeeZk,
+          auditorList,
+          taxAuthorityList,
+          minimumWage,
+          record,
+        ] = await Promise.all([
+          contract.requireEmployerKyc(),
+          contract.requireEmployeeKyc(),
+          contract.requireEmployerZkAttestation(),
+          contract.requireEmployeeZkAttestation(),
+          contract.getAuditors(),
+          contract.getTaxAuthorities(),
+          contract.minimumWage(),
+          contract.getComplianceRecord(account),
+        ])
+
+        setAdvancedComplianceSupported(true)
+        setCompliancePolicy({
+          employerKyc,
+          employeeKyc,
+          employerZk,
+          employeeZk,
+        })
+        setAuditors([...auditorList])
+        setTaxAuthorities([...taxAuthorityList])
+        setMinimumWageValue(Number(minimumWage))
+        setMyComplianceRecord({
+          approved: record.approved,
+          kycHash: record.kycHash,
+          zkHash: record.zkHash,
+        })
+      } catch {
+        setAdvancedComplianceSupported(false)
+        setCompliancePolicy(DEFAULT_COMPLIANCE_POLICY)
+        setAuditors([])
+        setTaxAuthorities([])
+        setMinimumWageValue(0)
+        setMyComplianceRecord(null)
+      }
+    } catch {
+      setAdvancedComplianceSupported(false)
+    }
   }, [contract, account])
 
   useEffect(() => { loadComplianceData() }, [loadComplianceData])
@@ -524,6 +627,11 @@ function App() {
   }
 
   const shortAddr = (addr: string) => addr.slice(0, 6) + '...' + addr.slice(-4)
+  const commitmentOrZero = (value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed) return ethers.ZeroHash
+    return ethers.isHexString(trimmed, 32) ? ethers.hexlify(trimmed) : ethers.id(trimmed)
+  }
 
   // ============ Governance Handlers ============
 
@@ -673,6 +781,7 @@ function App() {
       await tx.wait()
       showToast('Auditor added', 'success')
       setAuditorAddr('')
+      await loadComplianceData()
     } catch (err: unknown) {
       showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
     } finally { setLoading(null) }
@@ -686,6 +795,51 @@ function App() {
       await tx.wait()
       showToast('Tax authority added', 'success')
       setTaxAuthAddr('')
+      await loadComplianceData()
+    } catch (err: unknown) {
+      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+    } finally { setLoading(null) }
+  }
+
+  const handleApplyCompliancePolicy = async () => {
+    if (!contract) return
+    setLoading('setPolicy')
+    try {
+      const tx = await contract.configureCompliancePolicy(
+        compliancePolicy.employerKyc,
+        compliancePolicy.employeeKyc,
+        compliancePolicy.employerZk,
+        compliancePolicy.employeeZk,
+      )
+      await tx.wait()
+      showToast('Compliance policy updated', 'success')
+      await loadComplianceData()
+    } catch (err: unknown) {
+      showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+    } finally { setLoading(null) }
+  }
+
+  const handleSaveComplianceRecord = async (targetAddress?: string) => {
+    if (!contract) return
+    const subject = targetAddress || complianceSubject || account || ''
+    if (!ethers.isAddress(subject)) { showToast('Enter a valid address to register compliance', 'error'); return }
+    setLoading('setComplianceRecord')
+    try {
+      const tx = await contract.setComplianceRecord(
+        ethers.getAddress(subject),
+        complianceApproved,
+        commitmentOrZero(kycReference),
+        commitmentOrZero(zkReference),
+      )
+      await tx.wait()
+      showToast('Compliance record updated', 'success')
+      if (!targetAddress) {
+        setComplianceSubject('')
+      }
+      setKycReference('')
+      setZkReference('')
+      await loadComplianceData()
+      await loadContractData()
     } catch (err: unknown) {
       showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
     } finally { setLoading(null) }
@@ -701,6 +855,7 @@ function App() {
       await tx.wait()
       showToast('Minimum wage set to ' + val, 'success')
       setMinWageInput('')
+      await loadComplianceData()
     } catch (err: unknown) {
       showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
     } finally { setLoading(null) }
@@ -746,6 +901,30 @@ function App() {
     } finally { setLoading(null) }
   }
 
+  const decryptBooleanHandle = async (handleSource: Promise<string> | Promise<Uint8Array> | Promise<unknown>) => {
+    if (!provider || !fhevmRef.current) {
+      throw new Error('FHE SDK not ready')
+    }
+
+    const signer = await provider.getSigner()
+    const handleValue = await handleSource
+    const handleHex = ethers.hexlify(handleValue as ethers.BytesLike)
+    const { publicKey, privateKey } = fhevmRef.current.generateKeypair()
+    const startTimestamp = Math.floor(Date.now() / 1000)
+    const eip712 = fhevmRef.current.createEIP712(publicKey, [contractAddress], startTimestamp, 1)
+    const signature = await signer.signTypedData(
+      eip712.domain as Record<string, unknown>,
+      eip712.types as unknown as Record<string, ethers.TypedDataField[]>,
+      eip712.message as Record<string, unknown>,
+    )
+    const results = await fhevmRef.current.userDecrypt(
+      [{ handle: handleHex, contractAddress }],
+      privateKey, publicKey, signature,
+      [contractAddress], await signer.getAddress(), startTimestamp, 1,
+    )
+    return Boolean(results[handleHex as `0x${string}`])
+  }
+
   const handleVerifyMinWage = async (addr?: string) => {
     if (!contract) return
     setLoading('verifyMinWage')
@@ -761,6 +940,29 @@ function App() {
       }
     } catch (err: unknown) {
       showToast((err instanceof Error ? err.message : 'Failed').slice(0, 120), 'error')
+    } finally { setLoading(null) }
+  }
+
+  const handleDecryptMinWageResult = async () => {
+    if (!contract || !provider || !fhevmRef.current) { showToast('FHE SDK not ready', 'error'); return }
+    if (!ethers.isAddress(minWageCheckAddr)) { showToast('Enter an employee address first', 'error'); return }
+    setLoading('decryptMinWage')
+    try {
+      const result = await decryptBooleanHandle(contract.viewMinWageResult(minWageCheckAddr))
+      showToast(result ? '✅ Employee meets minimum wage' : '❌ Employee is below minimum wage', result ? 'success' : 'error')
+    } catch (err: unknown) {
+      showToast((err instanceof Error ? err.message : 'Decrypt failed').slice(0, 120), 'error')
+    } finally { setLoading(null) }
+  }
+
+  const handleDecryptAllMinWage = async () => {
+    if (!contract || !provider || !fhevmRef.current) { showToast('FHE SDK not ready', 'error'); return }
+    setLoading('decryptAllMinWage')
+    try {
+      const result = await decryptBooleanHandle(contract.viewAllMinWageResult())
+      showToast(result ? '✅ All employees meet minimum wage' : '❌ At least one employee is below minimum wage', result ? 'success' : 'error')
+    } catch (err: unknown) {
+      showToast((err instanceof Error ? err.message : 'Decrypt failed').slice(0, 120), 'error')
     } finally { setLoading(null) }
   }
 
@@ -912,31 +1114,83 @@ function App() {
   // Not Connected
   if (!account) {
     return (
-      <div className="app">
-        <div className="header">
-          <h1>🔐 ConfidentialCorp</h1>
-          <p>Enterprise Privacy Platform powered by Zama FHE</p>
-        </div>
-        <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
-          <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>💼</div>
-          <h2 style={{ justifyContent: 'center', marginBottom: '0.5rem' }}>Private Payroll · Board Governance · Tax Compliance</h2>
-          <p style={{ color: 'var(--text-dim)', maxWidth: '500px', margin: '0 auto 2rem' }}>
-            Encrypted payroll, board voting, and regulatory compliance — all powered by Fully Homomorphic Encryption. Data stays private even during computation.
-          </p>
-          <button className="btn btn-primary" onClick={openWalletModal} disabled={loading === 'connect'}>
-            {loading === 'connect' ? <><span className="loading"></span>Connecting...</> : '🔗 Connect Wallet'}
-          </button>
-          <p style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: 'var(--text-dim)' }}>
-            Supports MetaMask, OKX, Coinbase, Phantom and more
-          </p>
-        </div>
-        <div className="card">
-          <h2>How it works</h2>
-          <div className="info-row"><span className="info-label">1. Employer connects wallet and deploys payroll contract</span><span className="badge badge-employer">Employer</span></div>
-          <div className="info-row"><span className="info-label">2. Employer adds employees with encrypted salaries</span><span className="badge badge-encrypted">🔒 FHE</span></div>
-          <div className="info-row"><span className="info-label">3. Execute payroll — all amounts stay encrypted on-chain</span><span className="badge badge-encrypted">🔒 FHE</span></div>
-          <div className="info-row"><span className="info-label">4. Each employee decrypts only their own salary</span><span className="badge badge-employee">Private</span></div>
-        </div>
+      <div className="app-shell">
+        <header className="topbar">
+          <div className="topbar-brand">ZAMA <span>PAYROLL</span></div>
+          <div className="topbar-nav">
+            <span>Protocol</span>
+            <span>Developer</span>
+            <span>Compliance</span>
+            <span>Enterprise</span>
+          </div>
+          <div className="topbar-meta">
+            <a className="btn btn-dark" href="https://docs.zama.org/protocol" target="_blank" rel="noreferrer">Docs ↗</a>
+          </div>
+        </header>
+
+        <section className="hero-panel landing-panel">
+          <div className="hero-copy">
+            <span className="eyebrow">Confidential payroll operations on public infrastructure</span>
+            <h1 className="hero-title">Private payroll, formal governance, and audit-ready compliance.</h1>
+            <p className="hero-subtitle">
+              This console turns Zama FHE into an enterprise workflow: salaries stay encrypted, board votes stay private,
+              and regulated checks remain verifiable without exposing raw data.
+            </p>
+            <div className="hero-actions">
+              <button className="btn btn-light" onClick={openWalletModal} disabled={loading === 'connect'}>
+                {loading === 'connect' ? <><span className="loading"></span>Connecting...</> : 'Join Payroll Console'}
+              </button>
+              <a className="btn btn-dark" href="https://docs.zama.org/protocol" target="_blank" rel="noreferrer">Zama Docs ↗</a>
+            </div>
+            <div className="chip-row">
+              <span className="chip">FHE salaries</span>
+              <span className="chip">Private board votes</span>
+              <span className="chip">Optional KYC gate</span>
+              <span className="chip">Built-in ZK input proofs</span>
+            </div>
+          </div>
+
+          <div className="hero-visual">
+            <div className="pixel-cube" aria-hidden="true">
+              {Array.from({ length: 16 }).map((_, index) => (
+                <span key={index} className={'pixel-tile' + (index % 5 === 0 ? ' pixel-tile--accent' : '')}></span>
+              ))}
+            </div>
+            <div className="signal-stack">
+              <div className="signal-card">
+                <span className="signal-label">Host chain</span>
+                <strong>Ethereum Sepolia</strong>
+              </div>
+              <div className="signal-card">
+                <span className="signal-label">Relayer</span>
+                <strong>{TESTNET_RUNTIME.relayerUrl.replace('https://', '')}</strong>
+              </div>
+              <div className="signal-card">
+                <span className="signal-label">Gateway chain</span>
+                <strong>{TESTNET_RUNTIME.gatewayChainId}</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="summary-grid summary-grid--landing">
+          <article className="summary-card">
+            <span className="summary-label">Why Zama</span>
+            <strong className="summary-value">Compute on encrypted payroll data</strong>
+            <p>Traditional public chains force salary and balance data into the open. Zama keeps it encrypted while contracts still execute rules.</p>
+          </article>
+          <article className="summary-card">
+            <span className="summary-label">What is already ZK-backed</span>
+            <strong className="summary-value">Encrypted input proofs</strong>
+            <p>On Sepolia, every encrypted deposit, salary update, and vote goes through Zama’s input proof flow rather than blind trust.</p>
+          </article>
+          <article className="summary-card">
+            <span className="summary-label">Regulated mode</span>
+            <strong className="summary-value">Optional KYC + attestation gate</strong>
+            <p>Employers can switch between open payroll mode and a stricter compliance mode that gates employer and employee actions.</p>
+          </article>
+        </section>
+
         {showWalletModal && <WalletModal />}
       </div>
     )
@@ -945,18 +1199,35 @@ function App() {
   // Connected but no contract configured
   if (showSetup || !contractAddress) {
     return (
-      <div className="app">
-        <div className="header"><h1>🔐 ConfidentialCorp</h1></div>
-        <div className="network-bar">
-          <div><span className="network-dot"></span>Connected: {shortAddr(account)}</div>
-          <div style={{ color: 'var(--accent)', fontSize: '0.8rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            <span>{networkName}</span>
-            <button onClick={handleDisconnect}
-              style={{ fontSize: '0.75rem', color: 'var(--text-dim)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
-              Switch Wallet
-            </button>
+      <div className="app-shell">
+        <header className="topbar">
+          <div className="topbar-brand">ZAMA <span>PAYROLL</span></div>
+          <div className="topbar-nav">
+            <span>Deploy</span>
+            <span>Invite</span>
+            <span>Operate</span>
+          </div>
+          <div className="topbar-meta">
+            <span className="topbar-account">{shortAddr(account)}</span>
+            <button className="btn btn-ghost" onClick={handleDisconnect}>Switch Wallet</button>
+          </div>
+        </header>
+
+        <div className="network-ribbon">
+          <div>
+            <strong>Runtime</strong>
+            <span>{networkName || TARGET_NETWORK.chainName}</span>
+          </div>
+          <div>
+            <strong>Relayer</strong>
+            <span>{TESTNET_RUNTIME.relayerUrl.replace('https://', '')}</span>
+          </div>
+          <div>
+            <strong>Mode</strong>
+            <span>{TARGET_NETWORK.chainId === ZAMA_NETWORK.chainId ? 'Sepolia live flow' : 'Local mock flow'}</span>
           </div>
         </div>
+
         {renderSetupScreen()}
         {toast && <div className={'toast toast-' + toast.type}>{toast.msg}</div>}
       </div>
@@ -965,46 +1236,85 @@ function App() {
 
   // Main Dashboard
   return (
-    <div className="app">
-      <div className="header">
-        <h1>🔐 ConfidentialCorp</h1>
-        <p>
-          {companyName || 'Enterprise Privacy Platform'}
-          {isEmployer && <span className="badge badge-employer">Employer</span>}
-          {isEmployee && <span className="badge badge-employee">Employee</span>}
-          {isAdmin && <span className="badge badge-employer">Gov Admin</span>}
-          {isBoardMember && <span className="badge badge-employee">Board</span>}
-          {isAuditor && <span className="badge badge-encrypted">Auditor</span>}
-          {isTaxAuthority && <span className="badge badge-encrypted">Tax Auth</span>}
-        </p>
-      </div>
+    <div className="app-shell">
+      <header className="topbar">
+        <div className="topbar-brand">ZAMA <span>PAYROLL</span></div>
+        <div className="topbar-nav">
+          <span>Payroll</span>
+          <span>Governance</span>
+          <span>Compliance</span>
+          <span>Runtime</span>
+        </div>
+        <div className="topbar-meta">
+          <span className="topbar-account">{shortAddr(account)}</span>
+          <button className="btn btn-ghost" onClick={handleClearContract}>Change Contract</button>
+          <button className="btn btn-ghost" onClick={handleDisconnect}>Switch Wallet</button>
+        </div>
+      </header>
 
-      <div className="network-bar">
-        <div><span className="network-dot"></span>Connected: {shortAddr(account)}</div>
-        <div style={{ color: 'var(--accent)', fontSize: '0.8rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <span>{networkName || TARGET_NETWORK.chainName} · Cycle #{cycleCount} · {employees.length} employees</span>
-          <button onClick={handleClearContract}
-            style={{ fontSize: '0.75rem', color: 'var(--text-dim)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
-            Change Contract
-          </button>
-          <button onClick={handleDisconnect}
-            style={{ fontSize: '0.75rem', color: 'var(--text-dim)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
-            Switch Wallet
-          </button>
+      <section className="hero-panel hero-panel--dashboard">
+        <div className="hero-copy">
+          <span className="eyebrow">Confidential Payroll Console</span>
+          <h1 className="hero-title">{companyName || 'Enterprise payroll operations'}</h1>
+          <p className="hero-subtitle">
+            Encrypted salary execution, role-based decryption, and optional regulated access controls over Zama’s Sepolia runtime.
+          </p>
+          <div className="chip-row">
+            {isEmployer && <span className="chip">Employer</span>}
+            {isEmployee && <span className="chip">Employee</span>}
+            {isAdmin && <span className="chip">Gov Admin</span>}
+            {isBoardMember && <span className="chip">Board</span>}
+            {isAuditor && <span className="chip">Auditor</span>}
+            {isTaxAuthority && <span className="chip">Tax Authority</span>}
+            {advancedComplianceSupported && (compliancePolicy.employerKyc || compliancePolicy.employeeKyc || compliancePolicy.employerZk || compliancePolicy.employeeZk) && (
+              <span className="chip">Regulated Mode Active</span>
+            )}
+          </div>
+        </div>
+
+        <div className="summary-grid">
+          <article className="summary-card">
+            <span className="summary-label">Connected runtime</span>
+            <strong className="summary-value">{networkName || TARGET_NETWORK.chainName}</strong>
+            <p>{fhevmRef.current ? 'Live encrypted input and decrypt flow ready' : 'Wallet connected; live FHE available on Sepolia only'}</p>
+          </article>
+          <article className="summary-card">
+            <span className="summary-label">Contract</span>
+            <strong className="summary-value">{shortAddr(contractAddress)}</strong>
+            <p>Payroll cycle #{cycleCount} across {employees.length} registered employees.</p>
+          </article>
+          <article className="summary-card">
+            <span className="summary-label">Relayer</span>
+            <strong className="summary-value">{TESTNET_RUNTIME.relayerUrl.replace('https://', '')}</strong>
+            <p>Gateway chain {TESTNET_RUNTIME.gatewayChainId} · ACL {shortAddr(TESTNET_RUNTIME.aclContractAddress)}</p>
+          </article>
+        </div>
+      </section>
+
+      <div className="network-ribbon">
+        <div>
+          <strong>Account</strong>
+          <span>{shortAddr(account)}</span>
+        </div>
+        <div>
+          <strong>Input proof mode</strong>
+          <span>{fhevmRef.current ? 'Zama relayer + inputProof live' : 'Mock/local fallback'}</span>
+        </div>
+        <div>
+          <strong>KYC policy</strong>
+          <span>
+            {advancedComplianceSupported
+              ? `${compliancePolicy.employerKyc || compliancePolicy.employeeKyc ? 'KYC gated' : 'KYC optional'} · ${compliancePolicy.employerZk || compliancePolicy.employeeZk ? 'Attestation gated' : 'Attestation optional'}`
+              : 'Legacy contract / no advanced policy'}
+          </span>
         </div>
       </div>
 
       {/* Tab Navigation */}
-      <div style={{ display: 'flex', gap: '0', margin: '0 auto', maxWidth: '800px', width: '100%', borderBottom: '1px solid var(--border)' }}>
+      <div className="tab-strip">
         {(['payroll', 'governance', 'compliance'] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
-            style={{
-              flex: 1, padding: '0.75rem 1rem', background: activeTab === tab ? 'var(--card)' : 'transparent',
-              border: 'none', borderBottom: activeTab === tab ? '2px solid var(--accent)' : '2px solid transparent',
-              color: activeTab === tab ? 'var(--accent)' : 'var(--text-dim)', cursor: 'pointer',
-              fontWeight: activeTab === tab ? 600 : 400, fontSize: '0.95rem', transition: 'all 0.2s',
-              textTransform: 'capitalize',
-            }}>
+            className={'tab-button' + (activeTab === tab ? ' tab-button--active' : '')}>
             {tab === 'payroll' ? '💰 Payroll' : tab === 'governance' ? '🗳️ Governance' : '📋 Compliance'}
           </button>
         ))}
@@ -1342,6 +1652,96 @@ function App() {
           <>
             {/* Employer: Role Management */}
             {isEmployer && (
+              <>
+              <div className="card card-highlight">
+                <h2>🛡️ Compliance Policy</h2>
+                <p className="card-copy">
+                  Zama already secures encrypted payroll inputs with input proofs on Sepolia. The policy below adds an optional business layer:
+                  KYC approval and ZK/KYC attestation commitments for employer and employee actions.
+                </p>
+                {!advancedComplianceSupported ? (
+                  <div className="info-row">
+                    <span className="info-label">Advanced policy support</span>
+                    <span className="info-value">Deploy the latest payroll contract to use optional KYC / attestation gating</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="toggle-grid">
+                      <label className="toggle-row">
+                        <input type="checkbox" checked={compliancePolicy.employerKyc} onChange={e => setCompliancePolicy(prev => ({ ...prev, employerKyc: e.target.checked }))} />
+                        <span>Require employer KYC before regulated actions</span>
+                      </label>
+                      <label className="toggle-row">
+                        <input type="checkbox" checked={compliancePolicy.employeeKyc} onChange={e => setCompliancePolicy(prev => ({ ...prev, employeeKyc: e.target.checked }))} />
+                        <span>Require employee KYC before onboarding and payroll access</span>
+                      </label>
+                      <label className="toggle-row">
+                        <input type="checkbox" checked={compliancePolicy.employerZk} onChange={e => setCompliancePolicy(prev => ({ ...prev, employerZk: e.target.checked }))} />
+                        <span>Require employer attestation commitment</span>
+                      </label>
+                      <label className="toggle-row">
+                        <input type="checkbox" checked={compliancePolicy.employeeZk} onChange={e => setCompliancePolicy(prev => ({ ...prev, employeeZk: e.target.checked }))} />
+                        <span>Require employee attestation commitment</span>
+                      </label>
+                    </div>
+                    <div className="actions">
+                      <button className="btn btn-outline" onClick={() => setCompliancePolicy(DEFAULT_COMPLIANCE_POLICY)}>Open Mode Preset</button>
+                      <button className="btn btn-outline" onClick={() => setCompliancePolicy({ employerKyc: true, employeeKyc: true, employerZk: true, employeeZk: true })}>Regulated Mode Preset</button>
+                      <button className="btn btn-primary" onClick={handleApplyCompliancePolicy} disabled={loading === 'setPolicy'}>
+                        {loading === 'setPolicy' ? <><span className="loading"></span>Applying...</> : 'Apply Policy'}
+                      </button>
+                    </div>
+                  </>
+                )}
+                {myComplianceRecord && (
+                  <div className="policy-record">
+                    <div>
+                      <span className="summary-label">Current wallet compliance</span>
+                      <strong className="summary-value">{myComplianceRecord.approved ? 'Approved' : 'Not approved'}</strong>
+                    </div>
+                    <div>
+                      <span className="summary-label">KYC commitment</span>
+                      <strong className="mono-value">{myComplianceRecord.kycHash === ethers.ZeroHash ? 'Not set' : shortAddr(myComplianceRecord.kycHash)}</strong>
+                    </div>
+                    <div>
+                      <span className="summary-label">Attestation</span>
+                      <strong className="mono-value">{myComplianceRecord.zkHash === ethers.ZeroHash ? 'Not set' : shortAddr(myComplianceRecord.zkHash)}</strong>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="card">
+                <h2>🪪 KYC / Attestation Registry</h2>
+                <p className="card-copy">
+                  Store only commitments onchain. You can paste a bytes32 digest directly, or enter a plain reference string and the UI will hash it before submission.
+                </p>
+                <div className="input-group">
+                  <label>Subject Address</label>
+                  <input type="text" placeholder="0x..." value={complianceSubject} onChange={e => setComplianceSubject(e.target.value)} />
+                </div>
+                <div className="toggle-grid toggle-grid--compact">
+                  <label className="toggle-row">
+                    <input type="checkbox" checked={complianceApproved} onChange={e => setComplianceApproved(e.target.checked)} />
+                    <span>Mark subject as KYC approved</span>
+                  </label>
+                </div>
+                <div className="input-group">
+                  <label>KYC Commitment or Reference</label>
+                  <input type="text" placeholder="passport-hash / bytes32 / ref-id" value={kycReference} onChange={e => setKycReference(e.target.value)} />
+                </div>
+                <div className="input-group">
+                  <label>ZK / Attestation Commitment or Reference</label>
+                  <input type="text" placeholder="zk-proof-digest / attestation-id / bytes32" value={zkReference} onChange={e => setZkReference(e.target.value)} />
+                </div>
+                <div className="actions">
+                  <button className="btn btn-outline" onClick={() => { setComplianceSubject(account); setComplianceApproved(true) }}>Use My Wallet</button>
+                  <button className="btn btn-primary" onClick={() => handleSaveComplianceRecord()} disabled={loading === 'setComplianceRecord'}>
+                    {loading === 'setComplianceRecord' ? <><span className="loading"></span>Saving...</> : 'Save Compliance Record'}
+                  </button>
+                </div>
+              </div>
+
               <div className="card">
                 <h2>🔑 Role Management</h2>
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
@@ -1370,7 +1770,24 @@ function App() {
                     {loading === 'setMinWage' ? <span className="loading"></span> : 'Set'}
                   </button>
                 </div>
+                <div className="summary-grid summary-grid--mini" style={{ marginTop: '1rem' }}>
+                  <article className="summary-card">
+                    <span className="summary-label">Minimum wage</span>
+                    <strong className="summary-value">{minimumWageValue || 'Not set'}</strong>
+                  </article>
+                  <article className="summary-card">
+                    <span className="summary-label">Auditors</span>
+                    <strong className="summary-value">{auditors.length}</strong>
+                    <p>{auditors.length ? auditors.map(shortAddr).join(', ') : 'No auditors assigned'}</p>
+                  </article>
+                  <article className="summary-card">
+                    <span className="summary-label">Tax authorities</span>
+                    <strong className="summary-value">{taxAuthorities.length}</strong>
+                    <p>{taxAuthorities.length ? taxAuthorities.map(shortAddr).join(', ') : 'No tax authorities assigned'}</p>
+                  </article>
+                </div>
               </div>
+              </>
             )}
 
             {/* Auditor Panel */}
@@ -1408,6 +1825,9 @@ function App() {
                   <button className="btn btn-outline" onClick={() => handleVerifyMinWage()} disabled={loading === 'verifyMinWage'}>
                     {loading === 'verifyMinWage' ? <><span className="loading"></span>Checking...</> : '✅ Verify All Min Wage'}
                   </button>
+                  <button className="btn btn-success" onClick={handleDecryptAllMinWage} disabled={loading === 'decryptAllMinWage'}>
+                    {loading === 'decryptAllMinWage' ? <><span className="loading"></span>Decrypting...</> : '🔓 Decrypt Batch Result'}
+                  </button>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <input type="text" placeholder="Employee address for individual check" value={minWageCheckAddr}
@@ -1415,6 +1835,9 @@ function App() {
                     style={{ flex: 1, padding: '0.6rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)' }} />
                   <button className="btn btn-outline" onClick={() => handleVerifyMinWage(minWageCheckAddr)} disabled={loading === 'verifyMinWage'}>
                     Check Individual
+                  </button>
+                  <button className="btn btn-success" onClick={handleDecryptMinWageResult} disabled={loading === 'decryptMinWage'}>
+                    {loading === 'decryptMinWage' ? <><span className="loading"></span>Decrypting...</> : 'Decrypt Result'}
                   </button>
                 </div>
               </div>

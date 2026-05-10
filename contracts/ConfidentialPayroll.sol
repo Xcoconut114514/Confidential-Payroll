@@ -14,6 +14,15 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
     address public employer;
     string public companyName;
 
+    // --- Optional compliance policy ---
+    bool public requireEmployerKyc;
+    bool public requireEmployeeKyc;
+    bool public requireEmployerZkAttestation;
+    bool public requireEmployeeZkAttestation;
+    mapping(address => bool) public isKycApproved;
+    mapping(address => bytes32) public kycCommitment;
+    mapping(address => bytes32) public zkAttestationCommitment;
+
     // --- Employee registry ---
     address[] public employeeList;
     mapping(address => bool) public isEmployee;
@@ -55,6 +64,18 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
     event TaxAuthorityAdded(address indexed authority);
     event TaxAuthorityRemoved(address indexed authority);
     event MinimumWageUpdated(uint64 newMinimumWage);
+    event CompliancePolicyUpdated(
+        bool requireEmployerKyc,
+        bool requireEmployeeKyc,
+        bool requireEmployerZkAttestation,
+        bool requireEmployeeZkAttestation
+    );
+    event ComplianceRecordUpdated(
+        address indexed account,
+        bool approved,
+        bytes32 kycCommitment,
+        bytes32 zkAttestationCommitment
+    );
 
     // ============ Modifiers ============
 
@@ -65,6 +86,16 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
 
     modifier onlyEmployee() {
         require(isEmployee[msg.sender], "Not an employee");
+        _;
+    }
+
+    modifier onlyCompliantEmployer() {
+        _requireEmployerCompliance();
+        _;
+    }
+
+    modifier onlyCompliantEmployee(address employee) {
+        _requireEmployeeCompliance(employee);
         _;
     }
 
@@ -85,10 +116,68 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
         companyName = _companyName;
     }
 
+    // ============ Compliance Policy ============
+
+    function configureCompliancePolicy(
+        bool _requireEmployerKyc,
+        bool _requireEmployeeKyc,
+        bool _requireEmployerZkAttestation,
+        bool _requireEmployeeZkAttestation
+    ) external onlyEmployer {
+        requireEmployerKyc = _requireEmployerKyc;
+        requireEmployeeKyc = _requireEmployeeKyc;
+        requireEmployerZkAttestation = _requireEmployerZkAttestation;
+        requireEmployeeZkAttestation = _requireEmployeeZkAttestation;
+
+        emit CompliancePolicyUpdated(
+            _requireEmployerKyc,
+            _requireEmployeeKyc,
+            _requireEmployerZkAttestation,
+            _requireEmployeeZkAttestation
+        );
+    }
+
+    function setComplianceRecord(
+        address account,
+        bool approved,
+        bytes32 accountKycCommitment,
+        bytes32 accountZkAttestationCommitment
+    ) external onlyEmployer {
+        require(account != address(0), "Invalid address");
+
+        isKycApproved[account] = approved;
+        kycCommitment[account] = accountKycCommitment;
+        zkAttestationCommitment[account] = accountZkAttestationCommitment;
+
+        emit ComplianceRecordUpdated(account, approved, accountKycCommitment, accountZkAttestationCommitment);
+    }
+
+    function getComplianceRecord(address account) external view returns (bool approved, bytes32 kycHash, bytes32 zkHash) {
+        return (isKycApproved[account], kycCommitment[account], zkAttestationCommitment[account]);
+    }
+
+    function _requireEmployerCompliance() private view {
+        if (requireEmployerKyc) {
+            require(isKycApproved[employer], "Employer KYC required");
+        }
+        if (requireEmployerZkAttestation) {
+            require(zkAttestationCommitment[employer] != bytes32(0), "Employer ZK attestation required");
+        }
+    }
+
+    function _requireEmployeeCompliance(address employee) private view {
+        if (requireEmployeeKyc) {
+            require(isKycApproved[employee], "Employee KYC required");
+        }
+        if (requireEmployeeZkAttestation) {
+            require(zkAttestationCommitment[employee] != bytes32(0), "Employee ZK attestation required");
+        }
+    }
+
     // ============ Employer Functions ============
 
     /// @notice Deposit funds into the treasury (encrypted amount)
-    function deposit(externalEuint64 encAmount, bytes calldata inputProof) external onlyEmployer {
+    function deposit(externalEuint64 encAmount, bytes calldata inputProof) external onlyEmployer onlyCompliantEmployer {
         euint64 amount = FHE.fromExternal(encAmount, inputProof);
         _treasuryBalance = FHE.add(_treasuryBalance, amount);
         FHE.allowThis(_treasuryBalance);
@@ -101,9 +190,10 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
         address employee,
         externalEuint64 encSalary,
         bytes calldata inputProof
-    ) external onlyEmployer {
+    ) external onlyEmployer onlyCompliantEmployer {
         require(employee != address(0), "Invalid address");
         require(!isEmployee[employee], "Already employee");
+        _requireEmployeeCompliance(employee);
 
         isEmployee[employee] = true;
         employeeList.push(employee);
@@ -124,8 +214,9 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
         address employee,
         externalEuint64 encNewSalary,
         bytes calldata inputProof
-    ) external onlyEmployer {
+    ) external onlyEmployer onlyCompliantEmployer {
         require(isEmployee[employee], "Not an employee");
+        _requireEmployeeCompliance(employee);
 
         euint64 newSalary = FHE.fromExternal(encNewSalary, inputProof);
         _salaries[employee] = newSalary;
@@ -138,7 +229,7 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
     }
 
     /// @notice Remove an employee
-    function removeEmployee(address employee) external onlyEmployer {
+    function removeEmployee(address employee) external onlyEmployer onlyCompliantEmployer {
         require(isEmployee[employee], "Not an employee");
         isEmployee[employee] = false;
 
@@ -155,7 +246,7 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
     }
 
     /// @notice Execute payroll - add salary to each employee's claimable balance
-    function executePay() external onlyEmployer {
+    function executePay() external onlyEmployer onlyCompliantEmployer {
         uint256 count = employeeList.length;
         require(count > 0, "No employees");
 
@@ -164,6 +255,7 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
 
         for (uint256 i = 0; i < count; i++) {
             address emp = employeeList[i];
+            _requireEmployeeCompliance(emp);
 
             // Add salary to employee balance (encrypted + encrypted)
             _balances[emp] = FHE.add(_balances[emp], _salaries[emp]);
@@ -211,7 +303,7 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
     }
 
     /// @notice Reset pay cycle flags (call before next pay cycle)
-    function resetPayCycle() external onlyEmployer {
+    function resetPayCycle() external onlyEmployer onlyCompliantEmployer {
         for (uint256 i = 0; i < employeeList.length; i++) {
             isPaidThisCycle[employeeList[i]] = false;
         }
@@ -220,17 +312,17 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
     // ============ Employee Functions ============
 
     /// @notice Employee views their encrypted salary (only they + employer can decrypt)
-    function viewMySalary() external view onlyEmployee returns (euint64) {
+    function viewMySalary() external view onlyEmployee onlyCompliantEmployee(msg.sender) returns (euint64) {
         return _salaries[msg.sender];
     }
 
     /// @notice Employee views their encrypted claimable balance
-    function viewMyBalance() external view onlyEmployee returns (euint64) {
+    function viewMyBalance() external view onlyEmployee onlyCompliantEmployee(msg.sender) returns (euint64) {
         return _balances[msg.sender];
     }
 
     /// @notice Withdraw claimable balance (resets to zero)
-    function withdraw() external onlyEmployee {
+    function withdraw() external onlyEmployee onlyCompliantEmployee(msg.sender) {
         // Reset balance to zero
         _balances[msg.sender] = FHE.asEuint64(0);
         FHE.allowThis(_balances[msg.sender]);
@@ -260,7 +352,7 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
     // ============ Auditor Management ============
 
     /// @notice Add an auditor who can view aggregate payroll data
-    function addAuditor(address auditor) external onlyEmployer {
+    function addAuditor(address auditor) external onlyEmployer onlyCompliantEmployer {
         require(auditor != address(0), "Invalid address");
         require(!isAuditor[auditor], "Already auditor");
         isAuditor[auditor] = true;
@@ -269,7 +361,7 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
     }
 
     /// @notice Remove an auditor
-    function removeAuditor(address auditor) external onlyEmployer {
+    function removeAuditor(address auditor) external onlyEmployer onlyCompliantEmployer {
         require(isAuditor[auditor], "Not an auditor");
         isAuditor[auditor] = false;
         for (uint256 i = 0; i < auditorList.length; i++) {
@@ -290,7 +382,7 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
     // ============ Tax Authority Management ============
 
     /// @notice Add a tax authority who can verify compliance without seeing individual salaries
-    function addTaxAuthority(address authority) external onlyEmployer {
+    function addTaxAuthority(address authority) external onlyEmployer onlyCompliantEmployer {
         require(authority != address(0), "Invalid address");
         require(!isTaxAuthority[authority], "Already tax authority");
         isTaxAuthority[authority] = true;
@@ -299,7 +391,7 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
     }
 
     /// @notice Remove a tax authority
-    function removeTaxAuthority(address authority) external onlyEmployer {
+    function removeTaxAuthority(address authority) external onlyEmployer onlyCompliantEmployer {
         require(isTaxAuthority[authority], "Not a tax authority");
         isTaxAuthority[authority] = false;
         for (uint256 i = 0; i < taxAuthorityList.length; i++) {
@@ -318,7 +410,7 @@ contract ConfidentialPayroll is ZamaEthereumConfig {
     }
 
     /// @notice Set the minimum wage threshold (plaintext, for transparency)
-    function setMinimumWage(uint64 _minimumWage) external onlyEmployer {
+    function setMinimumWage(uint64 _minimumWage) external onlyEmployer onlyCompliantEmployer {
         minimumWage = _minimumWage;
         emit MinimumWageUpdated(_minimumWage);
     }

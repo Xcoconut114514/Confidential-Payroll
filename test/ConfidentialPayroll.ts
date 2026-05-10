@@ -316,6 +316,105 @@ describe("ConfidentialPayroll", function () {
     expect(clearBalance).to.eq(0);
   });
 
+  // ============ Optional KYC / ZK Compliance Policy ============
+
+  it("employer can require employee KYC before onboarding", async function () {
+    await (await contract.configureCompliancePolicy(false, true, false, false)).wait();
+
+    const salaryEnc = await fhevm
+      .createEncryptedInput(contractAddress, signers.deployer.address)
+      .add64(5000)
+      .encrypt();
+
+    await expect(
+      contract.addEmployee(signers.alice.address, salaryEnc.handles[0], salaryEnc.inputProof),
+    ).to.be.revertedWith("Employee KYC required");
+
+    await (
+      await contract.setComplianceRecord(signers.alice.address, true, ethers.id("alice-kyc"), ethers.ZeroHash)
+    ).wait();
+
+    await (await contract.addEmployee(signers.alice.address, salaryEnc.handles[0], salaryEnc.inputProof)).wait();
+    expect(await contract.isEmployee(signers.alice.address)).to.eq(true);
+  });
+
+  it("employer can require self KYC and ZK attestation for regulated actions", async function () {
+    await (await contract.configureCompliancePolicy(true, false, true, false)).wait();
+
+    const depositEnc = await fhevm
+      .createEncryptedInput(contractAddress, signers.deployer.address)
+      .add64(100000)
+      .encrypt();
+
+    await expect(
+      contract.deposit(depositEnc.handles[0], depositEnc.inputProof),
+    ).to.be.revertedWith("Employer KYC required");
+
+    await (
+      await contract.setComplianceRecord(signers.deployer.address, true, ethers.id("employer-kyc"), ethers.ZeroHash)
+    ).wait();
+
+    await expect(
+      contract.deposit(depositEnc.handles[0], depositEnc.inputProof),
+    ).to.be.revertedWith("Employer ZK attestation required");
+
+    await (
+      await contract.setComplianceRecord(
+        signers.deployer.address,
+        true,
+        ethers.id("employer-kyc"),
+        ethers.id("employer-zk-attestation"),
+      )
+    ).wait();
+
+    await (await contract.deposit(depositEnc.handles[0], depositEnc.inputProof)).wait();
+
+    const encTreasury = await contract.viewTreasury();
+    const clearTreasury = await fhevm.userDecryptEuint(
+      FhevmType.euint64,
+      encTreasury,
+      contractAddress,
+      signers.deployer,
+    );
+    expect(clearTreasury).to.eq(100000);
+  });
+
+  it("employee access can be gated by optional KYC and ZK attestation", async function () {
+    const salaryEnc = await fhevm
+      .createEncryptedInput(contractAddress, signers.deployer.address)
+      .add64(5000)
+      .encrypt();
+    await (await contract.addEmployee(signers.alice.address, salaryEnc.handles[0], salaryEnc.inputProof)).wait();
+
+    await (await contract.configureCompliancePolicy(false, true, false, true)).wait();
+
+    await expect(contract.connect(signers.alice).viewMySalary()).to.be.revertedWith("Employee KYC required");
+
+    await (
+      await contract.setComplianceRecord(signers.alice.address, true, ethers.id("alice-kyc"), ethers.ZeroHash)
+    ).wait();
+
+    await expect(contract.connect(signers.alice).viewMySalary()).to.be.revertedWith("Employee ZK attestation required");
+
+    await (
+      await contract.setComplianceRecord(
+        signers.alice.address,
+        true,
+        ethers.id("alice-kyc"),
+        ethers.id("alice-zk-attestation"),
+      )
+    ).wait();
+
+    const encSalary = await contract.connect(signers.alice).viewMySalary();
+    const clearSalary = await fhevm.userDecryptEuint(
+      FhevmType.euint64,
+      encSalary,
+      contractAddress,
+      signers.alice,
+    );
+    expect(clearSalary).to.eq(5000);
+  });
+
   // ============ Auditor Role ============
 
   it("employer can add and remove auditor", async function () {
