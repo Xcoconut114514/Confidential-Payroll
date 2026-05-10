@@ -139,6 +139,7 @@ const T = {
     changeContract: 'Change Contract',
     langBtn: '\u4e2d\u6587',
     eyebrow: 'Fully Homomorphic Encryption \u00b7 Ethereum Sepolia',
+    heroTitle: 'Payroll, governance, and compliance \u2014 end-to-end encrypted.',
     openConsole: 'Open Console',
     protocolDocs: 'Protocol Docs \u2197',
     connecting: 'Connecting...',
@@ -185,6 +186,7 @@ const T = {
     kycOptional: 'KYC optional',
     attestGated: 'Attestation gated',
     attestOptional: 'Attestation optional',
+    legacyContract: 'Legacy contract / no advanced policy',
     regulatedMode: 'Regulated Mode',
     employer: 'Employer',
     employee: 'Employee',
@@ -274,6 +276,7 @@ function App() {
   const [wallets, setWallets] = useState<WalletOption[]>([])
   const [networkName, setNetworkName] = useState('')
   const [lang, setLang] = useState<Lang>('en')
+  const [activeTab, setActiveTab] = useState<'payroll' | 'governance' | 'compliance'>('payroll')
   const activeProviderRef = useRef<EIP1193Provider | null>(null)
 
   // Governance state
