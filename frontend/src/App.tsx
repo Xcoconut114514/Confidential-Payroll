@@ -121,15 +121,141 @@ function detectWallets(): WalletOption[] {
   const coinbase = find(p => !!p.isCoinbaseWallet)
   const brave = find(p => !!p.isBraveWallet)
   return [
-    { id: 'metamask', name: 'MetaMask', icon: 'đź¦Š', provider: metamask, available: !!metamask, description: 'Most popular EVM wallet' },
-    { id: 'okx', name: 'OKX Wallet', icon: 'â­•', provider: okx, available: !!okx, description: 'OKX multi-chain wallet' },
-    { id: 'bitget', name: 'Bitget Wallet', icon: 'đź…±', provider: bitget, available: !!bitget, description: 'Bitget Web3 wallet' },
-    { id: 'phantom', name: 'Phantom (EVM)', icon: 'đź‘»', provider: phantom, available: !!phantom, description: 'Phantom Ethereum wallet' },
-    { id: 'coinbase', name: 'Coinbase Wallet', icon: 'đź”µ', provider: coinbase, available: !!coinbase, description: 'Coinbase self-custody wallet' },
-    { id: 'brave', name: 'Brave Wallet', icon: 'đź¦', provider: brave, available: !!brave, description: 'Built-in Brave browser wallet' },
+    { id: 'metamask', name: 'MetaMask', icon: 'MM', provider: metamask, available: !!metamask, description: 'Most popular EVM wallet' },
+    { id: 'okx', name: 'OKX Wallet', icon: 'OKX', provider: okx, available: !!okx, description: 'OKX multi-chain wallet' },
+    { id: 'bitget', name: 'Bitget Wallet', icon: 'BG', provider: bitget, available: !!bitget, description: 'Bitget Web3 wallet' },
+    { id: 'phantom', name: 'Phantom (EVM)', icon: 'PH', provider: phantom, available: !!phantom, description: 'Phantom Ethereum wallet' },
+    { id: 'coinbase', name: 'Coinbase Wallet', icon: 'CB', provider: coinbase, available: !!coinbase, description: 'Coinbase self-custody wallet' },
+    { id: 'brave', name: 'Brave Wallet', icon: 'BW', provider: brave, available: !!brave, description: 'Built-in Brave browser wallet' },
     { id: 'generic', name: 'Other Wallet', icon: 'đźŚ', provider: eth ?? null, available: !!eth, description: 'Any other injected wallet' },
   ]
 }
+
+type Lang = 'en' | 'zh'
+const T = {
+  en: {
+    docs: 'Docs \u2197',
+    switchWallet: 'Switch Wallet',
+    changeContract: 'Change Contract',
+    langBtn: '\u4e2d\u6587',
+    eyebrow: 'Fully Homomorphic Encryption \u00b7 Ethereum Sepolia',
+    openConsole: 'Open Console',
+    protocolDocs: 'Protocol Docs \u2197',
+    connecting: 'Connecting...',
+    chip1: 'FHE encrypted salaries',
+    chip2: 'Private board votes',
+    chip3: 'Optional KYC gate',
+    chip4: 'ZK input proofs',
+    showcaseTitle: 'ENCRYPTED STATE',
+    showcaseSalary: 'SALARY',
+    showcaseTreasury: 'TREASURY',
+    showcaseVote: 'VOTE',
+    showcaseStatus1: 'Zama fhEVM Sepolia',
+    showcaseStatus2: 'KMS Gateway active',
+    showcaseStatus3: 'Input proof flow ready',
+    getStarted: 'Get Started',
+    setupQ: 'Are you setting up a new payroll system, or joining an existing one?',
+    asEmployer: 'I am an Employer \u2014 Create New Payroll',
+    asEmployee: 'I am an Employee \u2014 Enter Contract Address',
+    back: 'Back',
+    createPayroll: 'Create New Payroll Contract',
+    createPayrollDesc: 'You will be the Employer. After deploying, share the contract address with your employees.',
+    coName: 'Company Name',
+    coNamePh: 'e.g. Zama Corp',
+    deployBtn: 'Deploy Contract',
+    deploying: 'Deploying...',
+    connectExisting: 'Connect to Existing Payroll',
+    connectExistingDesc: 'Ask your employer for the payroll contract address.',
+    contractAddr: 'Contract Address',
+    connect: 'Connect',
+    runtime: 'Runtime',
+    relayer: 'Relayer',
+    mode: 'Mode',
+    account: 'Account',
+    proofMode: 'Input proof mode',
+    kycPolicy: 'KYC policy',
+    fheLive: 'FHE live',
+    sepoliaOnly: 'Sepolia only for FHE',
+    tabPayroll: 'Payroll',
+    tabGov: 'Governance',
+    tabCompliance: 'Compliance',
+    liveFlow: 'Sepolia live flow',
+    localFlow: 'Local mock flow',
+    kycGated: 'KYC gated',
+    kycOptional: 'KYC optional',
+    attestGated: 'Attestation gated',
+    attestOptional: 'Attestation optional',
+    regulatedMode: 'Regulated Mode',
+    employer: 'Employer',
+    employee: 'Employee',
+    govAdmin: 'Gov Admin',
+    board: 'Board',
+    auditor: 'Auditor',
+    taxAuth: 'Tax Authority',
+  },
+  zh: {
+    docs: '\u6587\u6863 \u2197',
+    switchWallet: '\u5207\u6362\u9322\u5305',
+    changeContract: '\u66f4\u6362\u5408\u7ea6',
+    langBtn: 'EN',
+    eyebrow: '\u5168\u540c\u6001\u52a0\u5bc6 \u00b7 \u4ee5\u592a\u574a Sepolia',
+    heroTitle: '\u85aa\u8d44\u3001\u6cbb\u7406\u4e0e\u5408\u89c4 \u2014 \u5168\u94fe\u8def\u52a0\u5bc6\u6267\u884c\u3002',
+    openConsole: '\u6253\u5f00\u63a7\u5236\u53f0',
+    protocolDocs: '\u534f\u8bae\u6587\u6863 \u2197',
+    connecting: '\u8fde\u63a5\u4e2d\u2026',
+    chip1: 'FHE \u52a0\u5bc6\u85aa\u8d44',
+    chip2: '\u9690\u79c1\u6295\u7968',
+    chip3: '\u53ef\u9009 KYC \u95e8\u63a7',
+    chip4: 'ZK \u8f93\u5165\u8bc1\u660e',
+    showcaseTitle: '\u52a0\u5bc6\u72b6\u6001',
+    showcaseSalary: '\u85aa\u8d44',
+    showcaseTreasury: '\u56fd\u5e93',
+    showcaseVote: '\u6295\u7968',
+    showcaseStatus1: 'Zama fhEVM Sepolia',
+    showcaseStatus2: 'KMS \u7f51\u5173\u5c31\u7eea',
+    showcaseStatus3: '\u8f93\u5165\u8bc1\u660e\u6d41\u7a0b\u5c31\u7eea',
+    getStarted: '\u5f00\u59cb\u4f7f\u7528',
+    setupQ: '\u60a8\u662f\u8981\u8bbe\u7f6e\u65b0\u7684\u85aa\u8d44\u7cfb\u7edf\uff0c\u8fd8\u662f\u52a0\u5165\u73b0\u6709\u7cfb\u7edf\uff1f',
+    asEmployer: '\u6211\u662f\u96c7\u4e3b \u2014 \u521b\u5efa\u65b0\u85aa\u8d44\u5408\u7ea6',
+    asEmployee: '\u6211\u662f\u5458\u5de5 \u2014 \u8f93\u5165\u5408\u7ea6\u5730\u5740',
+    back: '\u8fd4\u56de',
+    createPayroll: '\u521b\u5efa\u85aa\u8d44\u5408\u7ea6',
+    createPayrollDesc: '\u60a8\u5c06\u6210\u4e3a\u96c7\u4e3b\u3002\u90e8\u7f72\u540e\uff0c\u5c06\u5408\u7ea6\u5730\u5740\u5206\u4eab\u7ed9\u60a8\u7684\u5458\u5de5\u3002',
+    coName: '\u516c\u53f8\u540d\u79f0',
+    coNamePh: '\u5982\uff1aZama Corp',
+    deployBtn: '\u90e8\u7f72\u5408\u7ea6',
+    deploying: '\u90e8\u7f72\u4e2d\u2026',
+    connectExisting: '\u8fde\u63a5\u73b0\u6709\u85aa\u8d44\u5408\u7ea6',
+    connectExistingDesc: '\u8bf7\u5411\u96c7\u4e3b\u83b7\u53d6\u5408\u7ea6\u5730\u5740\u3002',
+    contractAddr: '\u5408\u7ea6\u5730\u5740',
+    connect: '\u8fde\u63a5',
+    runtime: '\u8fd0\u884c\u65f6',
+    relayer: '\u4e2d\u7ee7\u5668',
+    mode: '\u6a21\u5f0f',
+    account: '\u8d26\u6237',
+    proofMode: '\u8f93\u5165\u8bc1\u660e\u6a21\u5f0f',
+    kycPolicy: 'KYC \u7b56\u7565',
+    fheLive: 'FHE \u5df2\u6fc0\u6d3b',
+    sepoliaOnly: '\u4ec5 Sepolia \u652f\u6301 FHE',
+    tabPayroll: '\u85aa\u8d44',
+    tabGov: '\u6cbb\u7406',
+    tabCompliance: '\u5408\u89c4',
+    liveFlow: 'Sepolia \u5b9e\u65f6\u6d41\u7a0b',
+    localFlow: '\u672c\u5730\u6a21\u62df\u6d41\u7a0b',
+    kycGated: 'KYC \u95e8\u63a7',
+    kycOptional: 'KYC \u53ef\u9009',
+    attestGated: '\u8bc1\u660e\u95e8\u63a7',
+    attestOptional: '\u8bc1\u660e\u53ef\u9009',
+    legacyContract: '\u65e7\u5408\u7ea6 / \u65e0\u9ad8\u7ea7\u7b56\u7565',
+    regulatedMode: '\u76d1\u7ba1\u6a21\u5f0f',
+    employer: '\u96c7\u4e3b',
+    employee: '\u5458\u5de5',
+    govAdmin: '\u6cbb\u7406\u7ba1\u7406\u5458',
+    board: '\u8463\u4e8b\u4f1a',
+    auditor: '\u5ba1\u8ba1\u5458',
+    taxAuth: '\u7a0e\u52a1\u673a\u5173',
+  },
+} as const
 
 function App() {
   const [account, setAccount] = useState<string | null>(null)
@@ -147,10 +273,11 @@ function App() {
   const [showWalletModal, setShowWalletModal] = useState(false)
   const [wallets, setWallets] = useState<WalletOption[]>([])
   const [networkName, setNetworkName] = useState('')
+  const [lang, setLang] = useState<Lang>('en')
   const activeProviderRef = useRef<EIP1193Provider | null>(null)
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<'payroll' | 'governance' | 'compliance'>('payroll')
+            {tab === 'payroll' ? t.tabPayroll : tab === 'governance' ? t.tabGov : t.tabCompliance}
 
   // Governance state
   const [govContractAddress, setGovContractAddress] = useState<string>(() => localStorage.getItem(LS_GOV_CONTRACT_KEY) || DEFAULT_GOV_CONTRACT)
@@ -193,6 +320,8 @@ function App() {
   // FHE SDK
   const { init: initFhevm, encryptUint64, userDecryptHandle } = useFhevm()
   const fhevmRef = useRef<import('@zama-fhe/relayer-sdk/web').FhevmInstance | null>(null)
+
+  const t = T[lang]
 
   // Form state
   const [newEmpAddress, setNewEmpAddress] = useState('')
@@ -1032,18 +1161,18 @@ function App() {
     <div className="card" style={{ maxWidth: '520px', margin: '2rem auto' }}>
       {setupMode === 'choose' && (
         <>
-          <h2 style={{ justifyContent: 'center', marginBottom: '0.5rem' }}>Get Started</h2>
+          <h2 style={{ justifyContent: 'center', marginBottom: '0.5rem' }}>{t.getStarted}</h2>
           <p style={{ color: 'var(--text-dim)', textAlign: 'center', marginBottom: '2rem' }}>
-            Are you setting up a new payroll system, or joining an existing one?
+            {t.setupQ}
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <button className="btn btn-primary" style={{ padding: '1.2rem', fontSize: '1rem', borderRadius: '12px' }}
               onClick={() => setSetupMode('deploy')}>
-              đźŹ˘ I am an Employer â€” Create New Payroll
+              {t.asEmployer}
             </button>
             <button className="btn btn-outline" style={{ padding: '1.2rem', fontSize: '1rem', borderRadius: '12px' }}
               onClick={() => setSetupMode('existing')}>
-              đź‘¤ I am an Employee â€” Enter Contract Address
+              {t.asEmployee}
             </button>
           </div>
         </>
@@ -1052,17 +1181,17 @@ function App() {
       {setupMode === 'deploy' && (
         <>
           <button className="btn btn-outline" style={{ marginBottom: '1rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }} onClick={() => setSetupMode('choose')}>
-            Back
+            {t.back}
           </button>
-          <h2 style={{ marginBottom: '0.5rem' }}>đźŹ˘ Create New Payroll Contract</h2>
+          <h2 style={{ marginBottom: '0.5rem' }}>{t.createPayroll}</h2>
           <p style={{ color: 'var(--text-dim)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
-            You will be the Employer. After deploying, share the contract address with your employees.
+            {t.createPayrollDesc}
           </p>
           <div className="input-group">
-            <label>Company Name</label>
+            <label>{t.coName}</label>
             <input
               type="text"
-              placeholder="e.g. Zama Corp"
+              placeholder={t.coNamePh}
               value={deployCompanyName}
               onChange={e => setDeployCompanyName(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleDeployNewPayroll() }}
@@ -1071,7 +1200,7 @@ function App() {
           <button className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}
             onClick={handleDeployNewPayroll}
             disabled={loading === 'deploy' || !deployCompanyName.trim()}>
-            {loading === 'deploy' ? <><span className="loading"></span>Deploying...</> : 'đźš€ Deploy Contract'}
+            {loading === 'deploy' ? <><span className="loading"></span>{t.deploying}</> : t.deployBtn}
           </button>
           <p style={{ color: 'var(--text-dim)', fontSize: '0.8rem', marginTop: '0.75rem', textAlign: 'center' }}>
             This sends a transaction on {TARGET_NETWORK.chainName}
@@ -1082,14 +1211,14 @@ function App() {
       {setupMode === 'existing' && (
         <>
           <button className="btn btn-outline" style={{ marginBottom: '1rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }} onClick={() => setSetupMode('choose')}>
-            Back
+            {t.back}
           </button>
-          <h2 style={{ marginBottom: '0.5rem' }}>đź‘¤ Connect to Existing Payroll</h2>
+          <h2 style={{ marginBottom: '0.5rem' }}>{t.connectExisting}</h2>
           <p style={{ color: 'var(--text-dim)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
-            Ask your employer for the payroll contract address.
+            {t.connectExistingDesc}
           </p>
           <div className="input-group">
-            <label>Contract Address</label>
+            <label>{t.contractAddr}</label>
             <input
               type="text"
               placeholder="0x..."
@@ -1101,7 +1230,7 @@ function App() {
           <button className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}
             onClick={handleUseExisting}
             disabled={!existingAddrInput}>
-            Connect
+            {t.connect}
           </button>
           <p style={{ color: 'var(--text-dim)', fontSize: '0.8rem', marginTop: '0.75rem', textAlign: 'center' }}>
             Demo contract (Zama Corp): 0x6dF4438C80D908B450a214eEF2A8DAAC748936AE
@@ -1118,25 +1247,53 @@ function App() {
         <header className="topbar">
           <div className="topbar-brand">CONFIDENTIAL <span>PAYROLL CONSOLE</span></div>
           <div className="topbar-meta">
-            <a className="btn btn-dark" href="https://docs.zama.org/protocol" target="_blank" rel="noreferrer">Docs â†—</a>
+            <button className="btn btn-ghost lang-btn" onClick={() => setLang(l => l === 'en' ? 'zh' : 'en')}>{t.langBtn}</button>
+            <a className="btn btn-dark" href="https://docs.zama.org/protocol" target="_blank" rel="noreferrer">{t.docs}</a>
           </div>
         </header>
 
-        <section className="hero-panel landing-panel">
+        <section className="hero-panel">
           <div className="hero-copy">
-            <span className="eyebrow">Fully Homomorphic Encryption Â· Ethereum Sepolia</span>
-            <h1 className="hero-title">Payroll, governance, and compliance â€” end-to-end encrypted.</h1>
+            <span className="eyebrow">{t.eyebrow}</span>
+            <h1 className="hero-title">{t.heroTitle}</h1>
             <div className="hero-actions">
               <button className="btn btn-light" onClick={openWalletModal} disabled={loading === 'connect'}>
-                {loading === 'connect' ? <><span className="loading"></span>Connecting...</> : 'Open Console'}
+                {loading === 'connect' ? <><span className="loading"></span>{t.connecting}</> : t.openConsole}
               </button>
-              <a className="btn btn-dark" href="https://docs.zama.org/protocol" target="_blank" rel="noreferrer">Protocol Docs â†—</a>
+              <a className="btn btn-dark" href="https://docs.zama.org/protocol" target="_blank" rel="noreferrer">{t.protocolDocs}</a>
             </div>
             <div className="chip-row">
-              <span className="chip">FHE encrypted salaries</span>
-              <span className="chip">Private board votes</span>
-              <span className="chip">Optional KYC gate</span>
-              <span className="chip">ZK input proofs</span>
+              <span className="chip">{t.chip1}</span>
+              <span className="chip">{t.chip2}</span>
+              <span className="chip">{t.chip3}</span>
+              <span className="chip">{t.chip4}</span>
+            </div>
+          </div>
+
+          <div className="fhe-showcase">
+            <div className="fhe-showcase-hd">
+              <span className="fhe-showcase-title">{t.showcaseTitle}</span>
+              <span className="fhe-live-dot"></span>
+            </div>
+            <div className="fhe-data-rows">
+              {([
+                { key: t.showcaseSalary, fill: '76%', type: 'euint64' },
+                { key: t.showcaseTreasury, fill: '58%', type: 'euint64' },
+                { key: t.showcaseVote, fill: '40%', type: 'euint8' },
+              ] as { key: string; fill: string; type: string }[]).map(row => (
+                <div key={row.key} className="fhe-data-row">
+                  <span className="fhe-data-key">{row.key}</span>
+                  <div className="fhe-data-bar">
+                    <div className="fhe-data-bar-fill" style={{ width: row.fill }}></div>
+                  </div>
+                  <span className="fhe-data-type">{row.type}</span>
+                </div>
+              ))}
+            </div>
+            <div className="fhe-status-rows">
+              <div className="fhe-status-row"><span className="fhe-status-indicator"></span>{t.showcaseStatus1}</div>
+              <div className="fhe-status-row"><span className="fhe-status-indicator"></span>{t.showcaseStatus2}</div>
+              <div className="fhe-status-row"><span className="fhe-status-indicator"></span>{t.showcaseStatus3}</div>
             </div>
           </div>
         </section>
@@ -1145,7 +1302,6 @@ function App() {
       </div>
     )
   }
-
   // Connected but no contract configured
   if (showSetup || !contractAddress) {
     return (
@@ -1154,13 +1310,14 @@ function App() {
           <div className="topbar-brand">CONFIDENTIAL <span>PAYROLL CONSOLE</span></div>
           <div className="topbar-meta">
             <span className="topbar-account">{shortAddr(account)}</span>
-            <button className="btn btn-ghost" onClick={handleDisconnect}>Switch Wallet</button>
+            <button className="btn btn-ghost lang-btn" onClick={() => setLang(l => l === 'en' ? 'zh' : 'en')}>{t.langBtn}</button>
+            <button className="btn btn-ghost" onClick={handleDisconnect}>{t.switchWallet}</button>
           </div>
         </header>
 
         <div className="network-ribbon">
           <div>
-            <strong>Runtime</strong>
+            <strong>{t.runtime}</strong>
             <span>{networkName || TARGET_NETWORK.chainName}</span>
           </div>
           <div>
@@ -1168,8 +1325,8 @@ function App() {
             <span>{TESTNET_RUNTIME.relayerUrl.replace('https://', '')}</span>
           </div>
           <div>
-            <strong>Mode</strong>
-            <span>{TARGET_NETWORK.chainId === ZAMA_NETWORK.chainId ? 'Sepolia live flow' : 'Local mock flow'}</span>
+            <strong>{t.mode}</strong>
+            <span>{TARGET_NETWORK.chainId === ZAMA_NETWORK.chainId ? t.liveFlow : t.localFlow}</span>
           </div>
         </div>
 
@@ -1186,24 +1343,25 @@ function App() {
         <div className="topbar-brand">CONFIDENTIAL <span>PAYROLL CONSOLE</span></div>
         <div className="topbar-meta">
           <span className="topbar-account">{shortAddr(account)}</span>
-          <button className="btn btn-ghost" onClick={handleClearContract}>Change Contract</button>
-          <button className="btn btn-ghost" onClick={handleDisconnect}>Switch Wallet</button>
+          <button className="btn btn-ghost lang-btn" onClick={() => setLang(l => l === 'en' ? 'zh' : 'en')}>{t.langBtn}</button>
+          <button className="btn btn-ghost" onClick={handleClearContract}>{t.changeContract}</button>
+          <button className="btn btn-ghost" onClick={handleDisconnect}>{t.switchWallet}</button>
         </div>
       </header>
 
       <section className="hero-panel hero-panel--dashboard">
         <div className="hero-copy">
-          <span className="eyebrow">{networkName || TARGET_NETWORK.chainName} · {fhevmRef.current ? 'FHE live' : 'Sepolia only for FHE'}</span>
+          <span className="eyebrow">{networkName || TARGET_NETWORK.chainName} &middot; {fhevmRef.current ? t.fheLive : t.sepoliaOnly}</span>
           <h1 className="hero-title">{companyName || 'Payroll Console'}</h1>
           <div className="chip-row">
-            {isEmployer && <span className="chip">Employer</span>}
-            {isEmployee && <span className="chip">Employee</span>}
-            {isAdmin && <span className="chip">Gov Admin</span>}
-            {isBoardMember && <span className="chip">Board</span>}
-            {isAuditor && <span className="chip">Auditor</span>}
-            {isTaxAuthority && <span className="chip">Tax Authority</span>}
+            {isEmployer && <span className="chip">{t.employer}</span>}
+            {isEmployee && <span className="chip">{t.employee}</span>}
+            {isAdmin && <span className="chip">{t.govAdmin}</span>}
+            {isBoardMember && <span className="chip">{t.board}</span>}
+            {isAuditor && <span className="chip">{t.auditor}</span>}
+            {isTaxAuthority && <span className="chip">{t.taxAuth}</span>}
             {advancedComplianceSupported && (compliancePolicy.employerKyc || compliancePolicy.employeeKyc || compliancePolicy.employerZk || compliancePolicy.employeeZk) && (
-              <span className="chip">Regulated Mode</span>
+              <span className="chip">{t.regulatedMode}</span>
             )}
           </div>
         </div>
@@ -1211,19 +1369,19 @@ function App() {
 
       <div className="network-ribbon">
         <div>
-          <strong>Account</strong>
+          <strong>{t.account}</strong>
           <span>{shortAddr(account)}</span>
         </div>
         <div>
-          <strong>Input proof mode</strong>
+          <strong>{t.proofMode}</strong>
           <span>{fhevmRef.current ? 'Zama relayer + inputProof live' : 'Mock/local fallback'}</span>
         </div>
         <div>
-          <strong>KYC policy</strong>
+          <strong>{t.kycPolicy}</strong>
           <span>
             {advancedComplianceSupported
-              ? `${compliancePolicy.employerKyc || compliancePolicy.employeeKyc ? 'KYC gated' : 'KYC optional'} Â· ${compliancePolicy.employerZk || compliancePolicy.employeeZk ? 'Attestation gated' : 'Attestation optional'}`
-              : 'Legacy contract / no advanced policy'}
+              ? (compliancePolicy.employerKyc || compliancePolicy.employeeKyc ? t.kycGated : t.kycOptional) + ' \u00b7 ' + (compliancePolicy.employerZk || compliancePolicy.employeeZk ? t.attestGated : t.attestOptional)
+              : t.legacyContract}
           </span>
         </div>
       </div>
@@ -1233,7 +1391,7 @@ function App() {
         {(['payroll', 'governance', 'compliance'] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             className={'tab-button' + (activeTab === tab ? ' tab-button--active' : '')}>
-            {tab === 'payroll' ? 'đź’° Payroll' : tab === 'governance' ? 'đź—łď¸Ź Governance' : 'đź“‹ Compliance'}
+            {tab === 'payroll' ? t.tabPayroll : tab === 'governance' ? t.tabGov : t.tabCompliance}
           </button>
         ))}
       </div>
@@ -1245,10 +1403,10 @@ function App() {
       {isEmployer && (
         <>
           <div className="card">
-            <h2>đź’° Treasury</h2>
+            <h2>Treasury</h2>
             <div className="info-row">
               <span className="info-label">Treasury Balance</span>
-              <span className="encrypted-value">đź”’ Encrypted</span>
+              <span className="encrypted-value">[Encrypted]</span>
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
               <input type="number" placeholder="Amount to deposit" value={depositAmount}
@@ -1261,7 +1419,7 @@ function App() {
           </div>
 
           <div className="card">
-            <h2>đź‘¤ Add Employee</h2>
+            <h2>Add Employee</h2>
             <div className="input-group">
               <label>Employee Wallet Address</label>
               <input type="text" placeholder="0x..." value={newEmpAddress} onChange={e => setNewEmpAddress(e.target.value)} />
@@ -1276,7 +1434,7 @@ function App() {
           </div>
 
           <div className="card">
-            <h2>đź“‹ Employee List</h2>
+            <h2>Employee List</h2>
             {employees.length === 0 ? (
               <p style={{ color: 'var(--text-dim)', textAlign: 'center', padding: '1rem' }}>No employees yet â€” add one above</p>
             ) : (
@@ -1286,7 +1444,7 @@ function App() {
                   {employees.map(emp => (
                     <tr key={emp}>
                       <td title={emp}>{shortAddr(emp)}</td>
-                      <td><span className="encrypted-value">đź”’ Encrypted</span></td>
+                      <td><span className="encrypted-value">[Encrypted]</span></td>
                       <td>
                         <span className={'status-dot ' + (paidStatus[emp] ? 'paid' : 'unpaid')}></span>
                         {paidStatus[emp] ? 'Paid' : 'Unpaid'}
@@ -1302,17 +1460,17 @@ function App() {
             )}
             <div className="actions">
               <button className="btn btn-success" onClick={handleExecutePay} disabled={loading === 'pay' || employees.length === 0}>
-                {loading === 'pay' ? <><span className="loading"></span>Processing...</> : 'đź’¸ Execute Payroll'}
+                {loading === 'pay' ? <><span className="loading"></span>Processing...</> : 'Execute Payroll'}
               </button>
               <button className="btn btn-outline" onClick={handleResetCycle} disabled={loading === 'reset'}>
-                đź”„ Reset Cycle
+                Reset Cycle
               </button>
             </div>
           </div>
 
           {/* Share with employees */}
           <div className="card" style={{ borderColor: 'var(--accent)' }}>
-            <h2>đź“‹ Share with Employees</h2>
+            <h2>Share with Employees</h2>
             <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
               Send this contract address to your employees. They paste it on the setup screen after connecting their wallet.
             </p>
@@ -1332,18 +1490,18 @@ function App() {
       {/* Employee Dashboard */}
       {isEmployee && (
         <div className="card">
-          <h2>đź§‘â€Ťđź’Ľ My Payroll</h2>
+          <h2>My Payroll</h2>
           <div className="info-row">
             <span className="info-label">My Salary</span>
             {mySalary !== null
               ? <span className="info-value">{mySalary.toString()} <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>units</span></span>
-              : <span className="encrypted-value">đź”’ Click below to decrypt</span>}
+              : <span className="encrypted-value">[Encrypted] </span>}
           </div>
           <div className="info-row">
             <span className="info-label">My Balance</span>
             {myBalance !== null
               ? <span className="info-value">{myBalance.toString()} <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>units</span></span>
-              : <span className="encrypted-value">đź”’ Click below to decrypt</span>}
+              : <span className="encrypted-value">[Encrypted] </span>}
           </div>
           <div className="info-row">
             <span className="info-label">This Cycle</span>
@@ -1396,7 +1554,7 @@ function App() {
       {activeTab === 'governance' && <>
         {!govContractAddress ? (
           <div className="card" style={{ maxWidth: '520px', margin: '2rem auto' }}>
-            <h2>đź—łď¸Ź Board Governance</h2>
+            <h2>Board Governance</h2>
             <p style={{ color: 'var(--text-dim)', marginBottom: '1.5rem' }}>Deploy a new governance contract or connect to an existing one.</p>
             <div className="input-group">
               <label>Organization Name</label>
@@ -1417,7 +1575,7 @@ function App() {
           <>
             <div className="card" style={{ borderColor: 'var(--accent)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h2>đź—łď¸Ź {govOrgName || 'Governance'}</h2>
+                <h2>{govOrgName || 'Governance'}</h2>
                 <button className="btn btn-outline" style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }} onClick={handleClearGov}>Change Contract</button>
               </div>
               <div className="info-row">
@@ -1437,7 +1595,7 @@ function App() {
             {/* Admin: manage board */}
             {isAdmin && (
               <div className="card">
-                <h2>đź‘Ą Board Management</h2>
+                <h2>Board Management</h2>
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
                   <input type="text" placeholder="Board member address 0x..." value={newMemberAddr}
                     onChange={e => setNewMemberAddr(e.target.value)}
@@ -1466,7 +1624,7 @@ function App() {
             {/* Admin: create proposal */}
             {isAdmin && (
               <div className="card">
-                <h2>đź“ť Create Proposal</h2>
+                <h2>Create Proposal</h2>
                 <div className="input-group">
                   <label>Title</label>
                   <input type="text" placeholder="e.g. Increase Q2 Budget" value={proposalTitle} onChange={e => setProposalTitle(e.target.value)} />
@@ -1487,7 +1645,7 @@ function App() {
 
             {/* Proposals list */}
             <div className="card">
-              <h2>đź“‹ Proposals ({proposals.length})</h2>
+              <h2>Proposals ({proposals.length})</h2>
               {proposals.length === 0 ? (
                 <p style={{ color: 'var(--text-dim)', textAlign: 'center', padding: '1rem' }}>No proposals yet</p>
               ) : proposals.map(p => {
@@ -1542,7 +1700,7 @@ function App() {
 
             {/* Share governance contract */}
             <div className="card" style={{ borderColor: 'var(--accent)' }}>
-              <h2>đź“‹ Share with Board Members</h2>
+              <h2>Share with Board Members</h2>
               <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
                 Share this governance contract address with board members.
               </p>
@@ -1572,7 +1730,7 @@ function App() {
             {isEmployer && (
               <>
               <div className="card card-highlight">
-                <h2>đź›ˇď¸Ź Compliance Policy</h2>
+                <h2>Compliance Policy</h2>
                 <p className="card-copy">
                   Zama already secures encrypted payroll inputs with input proofs on Sepolia. The policy below adds an optional business layer:
                   KYC approval and ZK/KYC attestation commitments for employer and employee actions.
@@ -1630,7 +1788,7 @@ function App() {
               </div>
 
               <div className="card">
-                <h2>đźŞŞ KYC / Attestation Registry</h2>
+                <h2>KYC / Attestation Registry</h2>
                 <p className="card-copy">
                   Store only commitments onchain. You can paste a bytes32 digest directly, or enter a plain reference string and the UI will hash it before submission.
                 </p>
@@ -1661,7 +1819,7 @@ function App() {
               </div>
 
               <div className="card">
-                <h2>đź”‘ Role Management</h2>
+                <h2>Role Management</h2>
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
                   <input type="text" placeholder="Auditor address 0x..." value={auditorAddr}
                     onChange={e => setAuditorAddr(e.target.value)}
@@ -1711,7 +1869,7 @@ function App() {
             {/* Auditor Panel */}
             {isAuditor && (
               <div className="card">
-                <h2>đź”Ť Auditor Panel</h2>
+                <h2>Auditor Panel</h2>
                 <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '1rem' }}>
                   As an auditor, you can view encrypted aggregates and check solvency without seeing individual salaries.
                 </p>
@@ -1732,7 +1890,7 @@ function App() {
             {/* Tax Authority Panel */}
             {isTaxAuthority && (
               <div className="card">
-                <h2>đźŹ›ď¸Ź Tax Authority Panel</h2>
+                <h2>Tax Authority Panel</h2>
                 <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '1rem' }}>
                   Verify minimum wage compliance and view aggregate payroll data â€” no individual salaries exposed.
                 </p>
