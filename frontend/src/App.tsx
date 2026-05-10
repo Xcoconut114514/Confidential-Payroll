@@ -276,9 +276,6 @@ function App() {
   const [lang, setLang] = useState<Lang>('en')
   const activeProviderRef = useRef<EIP1193Provider | null>(null)
 
-  // Tab state
-            {tab === 'payroll' ? t.tabPayroll : tab === 'governance' ? t.tabGov : t.tabCompliance}
-
   // Governance state
   const [govContractAddress, setGovContractAddress] = useState<string>(() => localStorage.getItem(LS_GOV_CONTRACT_KEY) || DEFAULT_GOV_CONTRACT)
   const [govContract, setGovContract] = useState<ethers.Contract | null>(null)
